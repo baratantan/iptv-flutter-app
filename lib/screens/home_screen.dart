@@ -31,13 +31,12 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('لم يتم العثور على بيانات الاتصال');
       }
 
-      final client = XtreamClient(
-        serverUrl: server,
-        username: username,
-        password: password,
-      );
+      // الطريقة الصحيحة: إنشاء Portal و Credentials أولاً
+      final portal = XtreamPortal.parse(server);
+      final credentials = XtreamCredentials(username: username, password: password);
+      final client = XtreamClient(portal, credentials);
 
-      // جلب القنوات المباشرة
+      // جلب القنوات المباشرة (بدون categoryId لجلب الكل)
       final streams = await client.getLiveStreams();
 
       setState(() {
