@@ -5,7 +5,7 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'player_screen.dart';
 import 'movie_details_screen.dart';
-import 'category_screen.dart'; // استدعاء شاشة التصنيفات
+import 'category_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
