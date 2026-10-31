@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:muxa_xtream/muxa_xtream.dart';
@@ -18,14 +19,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
   
-  // بيانات الصفحة الرئيسية
   List<XtVodItem> _moviesForBanner = [];
   List<XtVodItem> _latestMovies = [];
   List<XtSeriesItem> _latestSeries = [];
   List<XtLiveChannel> _latestChannels = [];
   List<XtCategory> _categories = [];
 
-  // قوائم كاملة للتبويبات الأخرى
   List<XtLiveChannel> _allLiveChannels = []; 
   List<XtCategory> _vodCategories = [];
   List<XtCategory> _seriesCategories = [];
@@ -35,7 +34,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _password = '';
   
   int _currentBannerIndex = 0;
-  final CarouselController _carouselController = CarouselController();
+  // التصحيح: نستخدم اسم الحزمة للتفريق بينها وبين CarouselController الخاص بـ Flutter
+  final carousel_slider.CarouselController _carouselController = carousel_slider.CarouselController();
 
   @override
   void initState() {
@@ -58,7 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final credentials = XtreamCredentials(username: _username, password: _password);
       final client = XtreamClient(portal, credentials);
 
-      // جلب البيانات الأساسية
       final results = await Future.wait([
         client.getLiveStreams(),
         client.getVodStreams(),
@@ -72,14 +71,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final allSeries = (results[2] as List).cast<XtSeriesItem>();
 
       setState(() {
-        // للبانر والشرائط الأفقية
         _moviesForBanner = allMovies.take(6).toList();
         _latestMovies = allMovies.take(12).toList();
         _latestSeries = allSeries.take(12).toList();
         _latestChannels = allLive.take(12).toList();
-        _categories = (results[3] as List).cast<XtCategory>(); // تصنيفات الأفلام للأزرار
+        _categories = (results[3] as List).cast<XtCategory>(); 
 
-        // للتبويبات
         _allLiveChannels = allLive;
         _vodCategories = (results[3] as List).cast<XtCategory>();
         _seriesCategories = (results[4] as List).cast<XtCategory>();
@@ -114,7 +111,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // دالة لفتح شاشة التصنيفات
   void _openCategory(XtCategory cat, String type) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -174,13 +170,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================
-  // 1. واجهة الرئيسية (البانر + التصنيفات + الشرائط)
-  // ==========================================
   Widget _buildHomeTab() {
     return ListView(
       children: [
-        // --- 1. البانر المتحرك ---
         Column(
           children: [
             CarouselSlider(
@@ -268,10 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-
         const SizedBox(height: 20),
-
-        // --- 2. أزرار التصنيفات ---
         SizedBox(
           height: 40,
           child: ListView.builder(
@@ -292,24 +281,15 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
         ),
-
         const SizedBox(height: 16),
-
-        // --- 3. شريط أحدث الأفلام ---
         _buildHorizontalSection('أحدث الأفلام', _latestMovies, 'movie'),
-
-        // --- 4. شريط أحدث المسلسلات ---
         _buildHorizontalSection('أحدث المسلسلات', _latestSeries, 'series'),
-
-        // --- 5. شريط أحدث القنوات ---
         _buildHorizontalSection('أحدث القنوات', _latestChannels, 'channel'),
-        
         const SizedBox(height: 20),
       ],
     );
   }
 
-  // دالة مساعدة لبناء شريط أفقي (Horizontal List)
   Widget _buildHorizontalSection(String title, List<dynamic> items, String type) {
     if (items.isEmpty) return const SizedBox.shrink();
 
@@ -389,9 +369,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================
-  // 2. تبويب القنوات (القائمة الكاملة)
-  // ==========================================
   Widget _buildChannelsTab() {
     return ListView.builder(
       itemCount: _allLiveChannels.length,
@@ -410,9 +387,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================
-  // 3. تبويب الأفلام/المسلسلات (التصنيفات)
-  // ==========================================
   Widget _buildCategoriesTab(List<XtCategory> categories, String type) {
     if (categories.isEmpty) return const Center(child: Text('لا توجد تصنيفات'));
 
