@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:muxa_xtream/muxa_xtream.dart';
-import 'player_screen.dart'; // استدعاء شاشة المشغل
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
+import 'player_screen.dart';
+import 'movie_details_screen.dart';
+import 'category_screen.dart'; // استدعاء شاشة التصنيفات
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,13 +18,24 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
   
-  List<XtLiveChannel> _liveChannels = [];
-  List<XtVodItem> _movies = [];
-  List<XtSeriesItem> _series = [];
+  // بيانات الصفحة الرئيسية
+  List<XtVodItem> _moviesForBanner = [];
+  List<XtVodItem> _latestMovies = [];
+  List<XtSeriesItem> _latestSeries = [];
+  List<XtLiveChannel> _latestChannels = [];
+  List<XtCategory> _categories = [];
+
+  // قوائم كاملة للتبويبات الأخرى
+  List<XtLiveChannel> _allLiveChannels = []; 
+  List<XtCategory> _vodCategories = [];
+  List<XtCategory> _seriesCategories = [];
 
   String _server = '';
   String _username = '';
   String _password = '';
+  
+  int _currentBannerIndex = 0;
+  final CarouselController _carouselController = CarouselController();
 
   @override
   void initState() {
@@ -43,16 +58,32 @@ class _HomeScreenState extends State<HomeScreen> {
       final credentials = XtreamCredentials(username: _username, password: _password);
       final client = XtreamClient(portal, credentials);
 
+      // جلب البيانات الأساسية
       final results = await Future.wait([
         client.getLiveStreams(),
         client.getVodStreams(),
         client.getSeries(),
+        client.getVodCategories(),
+        client.getSeriesCategories(),
       ]);
 
+      final allLive = (results[0] as List).cast<XtLiveChannel>();
+      final allMovies = (results[1] as List).cast<XtVodItem>();
+      final allSeries = (results[2] as List).cast<XtSeriesItem>();
+
       setState(() {
-        _liveChannels = (results[0] as List).cast<XtLiveChannel>();
-        _movies = (results[1] as List).cast<XtVodItem>();
-        _series = (results[2] as List).cast<XtSeriesItem>();
+        // للبانر والشرائط الأفقية
+        _moviesForBanner = allMovies.take(6).toList();
+        _latestMovies = allMovies.take(12).toList();
+        _latestSeries = allSeries.take(12).toList();
+        _latestChannels = allLive.take(12).toList();
+        _categories = (results[3] as List).cast<XtCategory>(); // تصنيفات الأفلام للأزرار
+
+        // للتبويبات
+        _allLiveChannels = allLive;
+        _vodCategories = (results[3] as List).cast<XtCategory>();
+        _seriesCategories = (results[4] as List).cast<XtCategory>();
+        
         _isLoading = false;
       });
     } catch (e) {
@@ -63,11 +94,37 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // دالة مساعدة لتشغيل الفيديو
   void _playStream(String url, String title) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PlayerScreen(streamUrl: url, channelName: title),
+      ),
+    );
+  }
+
+  void _openMovieDetails(String name, String url, String? poster) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MovieDetailsScreen(
+          movieName: name,
+          streamUrl: url,
+          posterUrl: poster,
+        ),
+      ),
+    );
+  }
+
+  // دالة لفتح شاشة التصنيفات
+  void _openCategory(XtCategory cat, String type) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CategoryScreen(
+          category: cat,
+          type: type,
+          server: _server,
+          username: _username,
+          password: _password,
+        ),
       ),
     );
   }
@@ -87,16 +144,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: const Color(0xFF111827),
           title: const Text('المكتبة'),
           bottom: const TabBar(
+            isScrollable: true,
             indicatorColor: Color(0xFFFF5238),
             labelColor: Color(0xFFFF5238),
             unselectedLabelColor: Colors.grey,
             tabs: [
+              Tab(text: 'الرئيسية', icon: Icon(Icons.home)),
               Tab(text: 'القنوات', icon: Icon(Icons.live_tv)),
               Tab(text: 'الأفلام', icon: Icon(Icons.movie)),
               Tab(text: 'المسلسلات', icon: Icon(Icons.video_library)),
@@ -105,24 +164,240 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         body: TabBarView(
           children: [
-            _buildChannelsList(),
-            _buildMoviesList(),
-            _buildSeriesList(),
+            _buildHomeTab(),
+            _buildChannelsTab(),
+            _buildCategoriesTab(_vodCategories, 'movie'),
+            _buildCategoriesTab(_seriesCategories, 'series'),
           ],
         ),
       ),
     );
   }
 
-  // 1. القنوات
-  Widget _buildChannelsList() {
-    return ListView.builder(
-      itemCount: _liveChannels.length,
-      itemBuilder: (context, index) {
-        final channel = _liveChannels[index];
-        // بناء رابط القناة المباشرة
-        final streamUrl = '$_server/live/$_username/$_password/${channel.streamId}.m3u8';
+  // ==========================================
+  // 1. واجهة الرئيسية (البانر + التصنيفات + الشرائط)
+  // ==========================================
+  Widget _buildHomeTab() {
+    return ListView(
+      children: [
+        // --- 1. البانر المتحرك ---
+        Column(
+          children: [
+            CarouselSlider(
+              carouselController: _carouselController,
+              options: CarouselOptions(
+                height: 250.0,
+                autoPlay: true,
+                autoPlayInterval: const Duration(seconds: 5),
+                enlargeCenterPage: true,
+                viewportFraction: 0.9,
+                onPageChanged: (index, reason) {
+                  setState(() {
+                    _currentBannerIndex = index;
+                  });
+                },
+              ),
+              items: _moviesForBanner.map((movie) {
+                final url = '$_server/movie/$_username/$_password/${movie.streamId}.mp4';
+                return Builder(
+                  builder: (BuildContext context) {
+                    return GestureDetector(
+                      onTap: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
+                      child: Container(
+                        width: MediaQuery.of(context).size.width,
+                        margin: const EdgeInsets.symmetric(horizontal: 5.0),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: NetworkImage(movie.posterUrl ?? ''),
+                            fit: BoxFit.cover,
+                            onError: (exception, stackTrace) {},
+                          ),
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  movie.name ?? 'بدون اسم',
+                                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 8),
+                                ElevatedButton.icon(
+                                  onPressed: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
+                                  icon: const Icon(Icons.play_arrow),
+                                  label: const Text('تشغيل الآن'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFF5238),
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 10),
+            SmoothPageIndicator(
+              controller: _carouselController,
+              count: _moviesForBanner.length,
+              effect: const ExpandingDotsEffect(
+                activeDotColor: Color(0xFFFF5238),
+                dotColor: Colors.grey,
+                dotHeight: 8,
+                dotWidth: 8,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+
+        // --- 2. أزرار التصنيفات ---
+        SizedBox(
+          height: 40,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _categories.length,
+            itemBuilder: (context, index) {
+              final cat = _categories[index];
+              return Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: ActionChip(
+                  label: Text(cat.name ?? ''),
+                  backgroundColor: const Color(0xFF1F2937),
+                  labelStyle: const TextStyle(color: Colors.white),
+                  onPressed: () => _openCategory(cat, 'movie'),
+                ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // --- 3. شريط أحدث الأفلام ---
+        _buildHorizontalSection('أحدث الأفلام', _latestMovies, 'movie'),
+
+        // --- 4. شريط أحدث المسلسلات ---
+        _buildHorizontalSection('أحدث المسلسلات', _latestSeries, 'series'),
+
+        // --- 5. شريط أحدث القنوات ---
+        _buildHorizontalSection('أحدث القنوات', _latestChannels, 'channel'),
         
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  // دالة مساعدة لبناء شريط أفقي (Horizontal List)
+  Widget _buildHorizontalSection(String title, List<dynamic> items, String type) {
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ),
+        SizedBox(
+          height: 180,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final name = item.name ?? 'بدون اسم';
+              String poster = '';
+              String streamUrl = '';
+
+              if (type == 'movie') {
+                poster = item.posterUrl ?? '';
+                streamUrl = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
+              } else if (type == 'series') {
+                poster = item.posterUrl ?? '';
+              } else if (type == 'channel') {
+                poster = item.logoUrl ?? '';
+                streamUrl = '$_server/live/$_username/$_password/${item.streamId}.m3u8';
+              }
+
+              return GestureDetector(
+                onTap: () {
+                  if (type == 'movie') {
+                    _openMovieDetails(name, streamUrl, poster);
+                  } else if (type == 'channel') {
+                    _playStream(streamUrl, name);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('المسلسلات قادمة قريباً')),
+                    );
+                  }
+                },
+                child: Container(
+                  width: 120,
+                  margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: poster.isNotEmpty
+                              ? Image.network(poster, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.movie))
+                              : const Icon(Icons.movie),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
+  // 2. تبويب القنوات (القائمة الكاملة)
+  // ==========================================
+  Widget _buildChannelsTab() {
+    return ListView.builder(
+      itemCount: _allLiveChannels.length,
+      itemBuilder: (context, index) {
+        final channel = _allLiveChannels[index];
+        final streamUrl = '$_server/live/$_username/$_password/${channel.streamId}.m3u8';
         return ListTile(
           onTap: () => _playStream(streamUrl, channel.name ?? 'قناة'),
           leading: channel.logoUrl != null && channel.logoUrl!.isNotEmpty
@@ -135,94 +410,37 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 2. الأفلام
-  Widget _buildMoviesList() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: _movies.length,
-      itemBuilder: (context, index) {
-        final movie = _movies[index];
-        // بناء رابط الفيلم (عادة يكون mp4 أو mkv)
-        final streamUrl = '$_server/movie/$_username/$_password/${movie.streamId}.mp4';
+  // ==========================================
+  // 3. تبويب الأفلام/المسلسلات (التصنيفات)
+  // ==========================================
+  Widget _buildCategoriesTab(List<XtCategory> categories, String type) {
+    if (categories.isEmpty) return const Center(child: Text('لا توجد تصنيفات'));
 
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 2.5,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: categories.length,
+      itemBuilder: (context, index) {
+        final cat = categories[index];
         return GestureDetector(
-          onTap: () => _playStream(streamUrl, movie.name ?? 'فيلم'),
-          child: Card(
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: movie.posterUrl != null && movie.posterUrl!.isNotEmpty
-                      ? Image.network(movie.posterUrl!, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.movie, size: 50))
-                      : const Icon(Icons.movie, size: 50),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(4.0),
-                  child: Text(
-                    movie.name ?? 'بدون اسم',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
+          onTap: () => _openCategory(cat, type),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1F2937),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[800]!),
             ),
-          ),
-        );
-      },
-    );
-  }
-
-  // 3. المسلسلات
-  Widget _buildSeriesList() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: _series.length,
-      itemBuilder: (context, index) {
-        final seriesItem = _series[index];
-        // ملاحظة: المسلسلات تحتاج إلى جلب الحلقات أولاً (وهذا يتطلب كوداً إضافياً لاحقاً)
-        // حالياً سنضع رابطاً وهمياً أو نعرض رسالة
-        return GestureDetector(
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('قريباً: عرض حلقات المسلسل')),
-            );
-          },
-          child: Card(
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: seriesItem.posterUrl != null && seriesItem.posterUrl!.isNotEmpty
-                      ? Image.network(seriesItem.posterUrl!, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.video_library, size: 50))
-                      : const Icon(Icons.video_library, size: 50),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(4.0),
-                  child: Text(
-                    seriesItem.name ?? 'بدون اسم',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
+            child: Center(
+              child: Text(
+                cat.name ?? 'بدون اسم',
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
             ),
           ),
         );
