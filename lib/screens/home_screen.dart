@@ -1,8 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:muxa_xtream/muxa_xtream.dart';
-import 'package:carousel_slider/carousel_slider.dart';
-import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'player_screen.dart';
 import 'movie_details_screen.dart';
 import 'category_screen.dart';
@@ -31,13 +30,42 @@ class _HomeScreenState extends State<HomeScreen> {
   String _server = '';
   String _username = '';
   String _password = '';
-  
-  int _currentBannerIndex = 0;
+
+  // للتحكم في البانر
+  final PageController _pageController = PageController(viewportFraction: 0.9);
+  int _currentPage = 0;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _loadAllData();
+    // بدء التمرير التلقائي للبانر
+    _startAutoPlay();
+  }
+
+  void _startAutoPlay() {
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (_moviesForBanner.isNotEmpty && _pageController.hasClients) {
+        if (_currentPage < _moviesForBanner.length - 1) {
+          _currentPage++;
+        } else {
+          _currentPage = 0;
+        }
+        _pageController.animateToPage(
+          _currentPage,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeIn,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAllData() async {
@@ -166,87 +194,77 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHomeTab() {
     return ListView(
       children: [
+        // البانر باستخدام PageView المدمج
         if (_moviesForBanner.isNotEmpty)
-          CarouselSlider(
-            options: CarouselOptions(
-              height: 250.0,
-              autoPlay: true,
-              autoPlayInterval: const Duration(seconds: 5),
-              enlargeCenterPage: true,
-              viewportFraction: 0.9,
-              onPageChanged: (index, reason) => setState(() => _currentBannerIndex = index),
-            ),
-            items: _moviesForBanner.map((movie) {
-              final url = '$_server/movie/$_username/$_password/${movie.streamId}.mp4';
-              return Builder(
-                builder: (BuildContext context) {
-                  return GestureDetector(
-                    onTap: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
+          SizedBox(
+            height: 250,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: _moviesForBanner.length,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentPage = index;
+                });
+              },
+              itemBuilder: (context, index) {
+                final movie = _moviesForBanner[index];
+                final url = '$_server/movie/$_username/$_password/${movie.streamId}.mp4';
+                return GestureDetector(
+                  onTap: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 5.0),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      image: DecorationImage(
+                        image: NetworkImage(movie.posterUrl ?? ''),
+                        fit: BoxFit.cover,
+                        onError: (exception, stackTrace) {},
+                      ),
+                    ),
                     child: Container(
-                      width: MediaQuery.of(context).size.width,
-                      margin: const EdgeInsets.symmetric(horizontal: 5.0),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
-                        image: DecorationImage(
-                          image: NetworkImage(movie.posterUrl ?? ''),
-                          fit: BoxFit.cover,
-                          onError: (exception, stackTrace) {},
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
                         ),
                       ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                movie.name ?? 'بدون اسم',
-                                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              movie.name ?? 'بدون اسم',
+                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 8),
+                            ElevatedButton.icon(
+                              onPressed: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
+                              icon: const Icon(Icons.play_arrow),
+                              label: const Text('تشغيل الآن'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFF5238),
+                                foregroundColor: Colors.white,
                               ),
-                              const SizedBox(height: 8),
-                              ElevatedButton.icon(
-                                onPressed: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
-                                icon: const Icon(Icons.play_arrow),
-                                label: const Text('تشغيل الآن'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFF5238),
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  );
-                },
-              );
-            }).toList(),
-          ),
-        if (_moviesForBanner.isNotEmpty)
-          Center(
-            child: SmoothPageIndicator(
-              count: _moviesForBanner.length,
-              effect: const ExpandingDotsEffect(
-                activeDotColor: Color(0xFFFF5238),
-                dotColor: Colors.grey,
-                dotHeight: 8,
-                dotWidth: 8,
-              ),
+                  ),
+                );
+              },
             ),
           ),
-        const SizedBox(height: 20),
+          
+        const SizedBox(height: 16),
+        
+        // أزرار التصنيفات
         SizedBox(
           height: 40,
           child: ListView.builder(
@@ -267,10 +285,14 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
         ),
+        
         const SizedBox(height: 16),
+        
+        // الشرائط الأفقية
         _buildHorizontalSection('أحدث الأفلام', _latestMovies, 'movie'),
         _buildHorizontalSection('أحدث المسلسلات', _latestSeries, 'series'),
         _buildHorizontalSection('أحدث القنوات', _latestChannels, 'channel'),
+        
         const SizedBox(height: 20),
       ],
     );
