@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:muxa_xtream/muxa_xtream.dart'; // استدعاء مكتبة Xtream
+import 'home_screen.dart'; // استدعاء الشاشة الرئيسية
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -26,17 +28,41 @@ class _SetupScreenState extends State<SetupScreen> {
 
     setState(() => _isLoading = true);
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('xtream_server', _serverController.text.trim());
-    await prefs.setString('xtream_username', _usernameController.text.trim());
-    await prefs.setString('xtream_password', _passwordController.text.trim());
-
-    setState(() => _isLoading = false);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ البيانات بنجاح! الشاشة الرئيسية قادمة.')),
+    try {
+      // الاتصال بسيرفر Xtream
+      final client = XtreamClient(
+        serverUrl: _serverController.text.trim(),
+        username: _usernameController.text.trim(),
+        password: _passwordController.text.trim(),
       );
+
+      // التحقق من صحة البيانات
+      final accountInfo = await client.getAccountInfo();
+
+      if (accountInfo != null) {
+        // حفظ البيانات في الذاكرة
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('xtream_server', _serverController.text.trim());
+        await prefs.setString('xtream_username', _usernameController.text.trim());
+        await prefs.setString('xtream_password', _passwordController.text.trim());
+
+        if (mounted) {
+          // الانتقال إلى الشاشة الرئيسية
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        }
+      } else {
+        throw Exception('بيانات الدخول غير صحيحة');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل الاتصال: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
