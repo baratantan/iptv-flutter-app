@@ -31,12 +31,10 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('لم يتم العثور على بيانات الاتصال');
       }
 
-      // الطريقة الصحيحة: إنشاء Portal و Credentials أولاً
       final portal = XtreamPortal.parse(server);
       final credentials = XtreamCredentials(username: username, password: password);
       final client = XtreamClient(portal, credentials);
 
-      // جلب القنوات المباشرة (بدون categoryId لجلب الكل)
       final streams = await client.getLiveStreams();
 
       setState(() {
@@ -67,8 +65,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   itemBuilder: (context, index) {
                     final stream = _liveStreams[index];
                     return ListTile(
-                      leading: stream.streamIcon != null && stream.streamIcon!.isNotEmpty
-                          ? Image.network(stream.streamIcon!, width: 50, height: 50, errorBuilder: (c, e, s) => const Icon(Icons.tv))
+                      // التصحيح: استخدام logoUrl بدلاً من streamIcon
+                      leading: stream.logoUrl != null && stream.logoUrl!.isNotEmpty
+                          ? Image.network(stream.logoUrl!, width: 50, height: 50, errorBuilder: (c, e, s) => const Icon(Icons.tv))
                           : const Icon(Icons.tv),
                       title: Text(stream.name ?? 'بدون اسم'),
                       subtitle: Text('ID: ${stream.streamId}'),
