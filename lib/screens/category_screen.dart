@@ -4,7 +4,7 @@ import 'movie_details_screen.dart';
 
 class CategoryScreen extends StatefulWidget {
   final XtCategory category;
-  final String type; // 'movie' أو 'series'
+  final String type; 
   final String server;
   final String username;
   final String password;
@@ -41,10 +41,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
       List<dynamic> result;
       if (widget.type == 'movie') {
-        // جلب أفلام هذا التصنيف
         result = await client.getVodStreams(categoryId: widget.category.id);
       } else {
-        // جلب مسلسلات هذا التصنيف
         result = await client.getSeries(categoryId: widget.category.id);
       }
 
