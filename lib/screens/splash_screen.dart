@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'setup_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -40,7 +41,7 @@ class _SplashScreenState extends State<SplashScreen>
     Timer(const Duration(milliseconds: 3000), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const _PlaceholderScreen()),
+          MaterialPageRoute(builder: (_) => const SetupScreen()),
         );
       }
     });
@@ -125,22 +126,6 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderScreen extends StatelessWidget {
-  const _PlaceholderScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text(
-          'شاشة الإعداد قادمة',
-          style: TextStyle(color: Colors.white, fontSize: 18),
         ),
       ),
     );
