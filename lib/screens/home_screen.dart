@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:muxa_xtream/muxa_xtream.dart';
-// import 'player_screen.dart'; // سنفعله لاحقاً
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -181,8 +180,8 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: seriesItem.coverUrl != null && seriesItem.coverUrl!.isNotEmpty
-                    ? Image.network(seriesItem.coverUrl!, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.video_library, size: 50))
+                child: seriesItem.posterUrl != null && seriesItem.posterUrl!.isNotEmpty
+                    ? Image.network(seriesItem.posterUrl!, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.video_library, size: 50))
                     : const Icon(Icons.video_library, size: 50),
               ),
               Padding(
