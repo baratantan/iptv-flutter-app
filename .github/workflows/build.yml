@@ -26,6 +26,17 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # 1. إنشاء مشروع Flutter جديد وكامل (يحتوي على مجلد android)
+      - name: Create Flutter project
+        run: flutter create --project-name iptv_flutter_app --platforms android .
+
+      # 2. نسخ كودنا الخاص (lib و pubspec.yaml) فوق المشروع الجديد
+      - name: Copy our code
+        run: |
+          cp pubspec.yaml ./pubspec.yaml
+          cp -r lib ./lib
+
+      # 3. جلب التبعيات وبناء APK
       - name: Get dependencies
         run: flutter pub get
 
