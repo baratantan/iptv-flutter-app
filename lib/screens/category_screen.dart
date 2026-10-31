@@ -102,7 +102,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
                                 ),
                               );
                             } else {
-                              // المسلسلات: سنعرض رسالة مؤقتة
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('قريباً: عرض حلقات المسلسل')),
                               );
