@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:muxa_xtream/muxa_xtream.dart'; // استدعاء مكتبة Xtream
-import 'home_screen.dart'; // استدعاء الشاشة الرئيسية
+import 'package:muxa_xtream/muxa_xtream.dart';
+import 'home_screen.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -29,25 +29,25 @@ class _SetupScreenState extends State<SetupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // الاتصال بسيرفر Xtream
-      final client = XtreamClient(
-        serverUrl: _serverController.text.trim(),
+      // الطريقة الصحيحة: إنشاء Portal و Credentials أولاً
+      final portal = XtreamPortal.parse(_serverController.text.trim());
+      final credentials = XtreamCredentials(
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
       );
+      // تمرير المعاملات الموضعية (portal, credentials)
+      final client = XtreamClient(portal, credentials);
 
       // التحقق من صحة البيانات
-      final accountInfo = await client.getAccountInfo();
+      final accountInfo = await client.getUserAndServerInfo();
 
       if (accountInfo != null) {
-        // حفظ البيانات في الذاكرة
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('xtream_server', _serverController.text.trim());
         await prefs.setString('xtream_username', _usernameController.text.trim());
         await prefs.setString('xtream_password', _passwordController.text.trim());
 
         if (mounted) {
-          // الانتقال إلى الشاشة الرئيسية
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const HomeScreen()),
           );
