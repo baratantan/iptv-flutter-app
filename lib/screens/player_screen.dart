@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:floating/floating.dart';
+import 'package:local_pip/local_pip.dart';
 
 class PlayerScreen extends StatefulWidget {
   final String streamUrl;
@@ -20,7 +20,7 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late final Player player;
   late final VideoController controller;
-  final Floating _floating = Floating();
+  final LocalPip _localPip = LocalPip();
   bool _isPipAvailable = false;
 
   @override
@@ -33,23 +33,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _checkPipAvailability() async {
-    final available = await _floating.isPipAvailable;
-    if (mounted) {
-      setState(() {
-        _isPipAvailable = available;
-      });
+    try {
+      final available = await _localPip.isPipAvailable();
+      if (mounted) {
+        setState(() {
+          _isPipAvailable = available;
+        });
+      }
+    } catch (e) {
+      debugPrint('PiP check failed: $e');
     }
   }
 
   Future<void> _enterPipMode() async {
-    if (_isPipAvailable) {
-      await _floating.enable(ImmediatePiP());
+    try {
+      await _localPip.enterPipMode();
+    } catch (e) {
+      debugPrint('Failed to enter PiP: $e');
     }
   }
 
   @override
   void dispose() {
-    _floating.dispose();
     player.dispose();
     super.dispose();
   }
