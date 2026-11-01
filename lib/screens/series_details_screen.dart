@@ -37,13 +37,13 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
       final credentials = XtreamCredentials(username: widget.username, password: widget.password);
       final client = XtreamClient(portal, credentials);
 
-      // جلب معلومات المسلسل (المواسم والحلقات)
+      // جلب معلومات المسلسل
       final info = await client.getSeriesInfo(widget.seriesItem.seriesId);
       
       setState(() {
-        // في بعض السيرفرات، تأتي الحلقات داخل خريطة (Map) وليس قائمة مباشرة
-        if (info != null && info.episodes != null) {
-          _seasons = info.episodes!.entries.map((entry) {
+        // التصحيح: الخاصية الصحيحة هي seasons وليس episodes
+        if (info != null && info.seasons != null) {
+          _seasons = info.seasons.entries.map((entry) {
             final seasonNum = entry.key;
             final episodesList = entry.value;
             return {
@@ -91,11 +91,10 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                           ),
                           children: episodesList.map<Widget>((episode) {
-                            // التكيف مع أسماء الحقول المختلفة التي قد تأتي من السيرفر
                             final epNum = episode.episodeNum ?? episode.episodeNumber ?? '?';
                             final epTitle = episode.title ?? 'حلقة $epNum';
                             
-                            // بناء رابط الحلقة بناءً على معرّف الحلقة (id أو streamId)
+                            // بناء رابط الحلقة بناءً على معرّف الحلقة
                             final epId = episode.id ?? episode.streamId;
                             final extension = episode.containerExtension ?? 'mp4';
                             final streamUrl = '${widget.server}/series/${widget.username}/${widget.password}/$epId.$extension';
