@@ -6,6 +6,7 @@ import 'player_screen.dart';
 import 'movie_details_screen.dart';
 import 'category_screen.dart';
 import 'setup_screen.dart';
+import 'series_details_screen.dart'; // استدعاء شاشة المسلسلات
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -142,6 +143,19 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => CategoryScreen(
           category: cat,
           type: type,
+          server: _server,
+          username: _username,
+          password: _password,
+        ),
+      ),
+    );
+  }
+
+  void _openSeriesDetails(XtSeriesItem seriesItem) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SeriesDetailsScreen(
+          seriesItem: seriesItem,
           server: _server,
           username: _username,
           password: _password,
@@ -367,7 +381,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   } else if (type == 'channel') {
                     _playStream(streamUrl, name);
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المسلسلات قادمة قريباً')));
+                    // فتح شاشة المسلسل
+                    _openSeriesDetails(item);
                   }
                 },
                 child: Container(
@@ -449,9 +464,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 final streamUrl = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
                 _openMovieDetails(name, streamUrl, poster);
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('قريباً: عرض حلقات المسلسل')),
-                );
+                // فتح شاشة المسلسل
+                _openSeriesDetails(item);
               }
             },
             child: Column(
