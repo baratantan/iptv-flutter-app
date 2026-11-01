@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'setup_screen.dart';
+import 'home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -37,14 +39,25 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     _controller.forward();
+    _checkLoginStatus();
+  }
 
-    Timer(const Duration(milliseconds: 3000), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const SetupScreen()),
-        );
-      }
-    });
+  Future<void> _checkLoginStatus() async {
+    await Future.delayed(const Duration(milliseconds: 3000));
+    if (!mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final server = prefs.getString('xtream_server') ?? '';
+
+    if (server.isNotEmpty) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const SetupScreen()),
+      );
+    }
   }
 
   @override
