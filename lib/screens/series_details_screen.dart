@@ -37,11 +37,9 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
       final credentials = XtreamCredentials(username: widget.username, password: widget.password);
       final client = XtreamClient(portal, credentials);
 
-      // جلب معلومات المسلسل
       final info = await client.getSeriesInfo(widget.seriesItem.seriesId);
       
       setState(() {
-        // التصحيح: الخاصية الصحيحة هي seasons وليس episodes
         if (info != null && info.seasons != null) {
           _seasons = info.seasons.entries.map((entry) {
             final seasonNum = entry.key;
@@ -93,8 +91,6 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                           children: episodesList.map<Widget>((episode) {
                             final epNum = episode.episodeNum ?? episode.episodeNumber ?? '?';
                             final epTitle = episode.title ?? 'حلقة $epNum';
-                            
-                            // بناء رابط الحلقة بناءً على معرّف الحلقة
                             final epId = episode.id ?? episode.streamId;
                             final extension = episode.containerExtension ?? 'mp4';
                             final streamUrl = '${widget.server}/series/${widget.username}/${widget.password}/$epId.$extension';
