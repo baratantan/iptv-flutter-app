@@ -89,7 +89,8 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                           ),
                           children: episodesList.map<Widget>((episode) {
-                            final epNum = episode.episodeNum ?? episode.episodeNumber ?? '?';
+                            // التصحيح: استخدام episode بدلاً من episodeNum
+                            final epNum = episode.episode ?? episode.episodeNumber ?? '?';
                             final epTitle = episode.title ?? 'حلقة $epNum';
                             final epId = episode.id ?? episode.streamId;
                             final extension = episode.containerExtension ?? 'mp4';
