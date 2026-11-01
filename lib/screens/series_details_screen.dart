@@ -89,12 +89,13 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                           ),
                           children: episodesList.map<Widget>((episode) {
-                            // التصحيح: استخدام episode بدلاً من episodeNum
-                            final epNum = episode.episode ?? episode.episodeNumber ?? '?';
+                            // استخدام episode بدلاً من episodeNum (موجودة في المكتبة)
+                            final epNum = episode.episode ?? '?';
                             final epTitle = episode.title ?? 'حلقة $epNum';
-                            final epId = episode.id ?? episode.streamId;
-                            final extension = episode.containerExtension ?? 'mp4';
-                            final streamUrl = '${widget.server}/series/${widget.username}/${widget.password}/$epId.$extension';
+                            final epId = episode.id;
+                            
+                            // بناء الرابط مباشرة بدون containerExtension
+                            final streamUrl = '${widget.server}/series/${widget.username}/${widget.password}/$epId.mp4';
                             
                             return ListTile(
                               leading: const Icon(Icons.play_circle_outline, color: Color(0xFFFF5238)),
