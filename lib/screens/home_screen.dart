@@ -7,7 +7,7 @@ import 'player_screen.dart';
 import 'movie_details_screen.dart';
 import 'category_screen.dart';
 import 'series_details_screen.dart';
-import 'settings_screen.dart'; // استدعاء صفحة الإعدادات الجديدة
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -76,19 +76,17 @@ class _HomeScreenState extends State<HomeScreen> {
       final sourceType = prefs.getString('source_type') ?? 'xtream';
 
       if (sourceType == 'm3u') {
-        // تحميل بيانات M3U
         final m3uContent = prefs.getString('m3u_content') ?? '';
         if (m3uContent.isEmpty) throw Exception('لا يوجد محتوى M3U');
 
-        final playlist = await parseM3UPlaylist(content: m3uContent);
+        final playlist = await parseM3u(m3uContent);
         
-        // تحويل قنوات M3U إلى كائنات متوافقة مع الواجهة
         final List<XtLiveChannel> m3uChannels = playlist.channels.map((ch) {
           return XtLiveChannel(
             streamId: 0,
             name: ch.name,
-            streamIcon: ch.logo,
-            categoryId: 0,
+            categoryId: '0',
+            logoUrl: ch.logo,
           );
         }).toList();
 
@@ -105,7 +103,6 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      // إذا كان xtream
       _server = prefs.getString('xtream_server') ?? '';
       _username = prefs.getString('xtream_username') ?? '';
       _password = prefs.getString('xtream_password') ?? '';
@@ -211,7 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _buildChannelsTab(),
       _buildMediaGrid(_allMovies, 'movie'), 
       _buildMediaGrid(_allSeries, 'series'), 
-      const SizedBox(), // صفحة فارغة للزر الخامس (لن يتم الوصول إليها لأننا نفتح الإعدادات مباشرة)
+      const SizedBox(),
     ];
 
     return Scaffold(
@@ -227,7 +224,6 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentTabIndex,
         onTap: (index) {
           if (index == 4) {
-            // فتح صفحة الإعدادات الجديدة
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
             );
