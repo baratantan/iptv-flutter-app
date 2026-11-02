@@ -23,7 +23,12 @@ class SeriesDetailsScreen extends StatefulWidget {
 class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
-  List<dynamic> _seasons = [];
+  
+  // بيانات المسلسل
+  XtSeriesDetails? _seriesInfo;
+  List<String> _seasonKeys = [];
+  String? _selectedSeason;
+  List<dynamic> _currentEpisodes = [];
 
   @override
   void initState() {
@@ -40,17 +45,12 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
       final info = await client.getSeriesInfo(widget.seriesItem.seriesId);
       
       setState(() {
-        if (info != null && info.seasons != null) {
-          _seasons = info.seasons.entries.map((entry) {
-            final seasonNum = entry.key;
-            final episodesList = entry.value;
-            return {
-              'seasonNumber': seasonNum,
-              'episodes': episodesList,
-            };
-          }).toList();
-        } else {
-          _seasons = [];
+        _seriesInfo = info;
+        if (info != null && info.seasons != null && info.seasons!.isNotEmpty) {
+          _seasonKeys = info.seasons!.keys.toList();
+          // اختيار الموسم الأول تلقائياً
+          _selectedSeason = _seasonKeys.first;
+          _currentEpisodes = info.seasons![_selectedSeason] ?? [];
         }
         _isLoading = false;
       });
@@ -62,62 +62,174 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
     }
   }
 
+  void _onSeasonChanged(String? season) {
+    if (season == null) return;
+    setState(() {
+      _selectedSeason = season;
+      _currentEpisodes = _seriesInfo?.seasons?[season] ?? [];
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator(color: Color(0xFFFF5238))));
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return Scaffold(body: Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.red))));
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0B0E14),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF111827),
-        title: Text(widget.seriesItem.name ?? 'المسلسل'),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF5238)))
-          : _errorMessage.isNotEmpty
-              ? Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.red)))
-              : _seasons.isEmpty
-                  ? const Center(child: Text('لا توجد حلقات متاحة', style: TextStyle(color: Colors.grey)))
-                  : ListView.builder(
-                      itemCount: _seasons.length,
-                      itemBuilder: (context, index) {
-                        final season = _seasons[index];
-                        final seasonNumber = season['seasonNumber'];
-                        final episodesList = season['episodes'] as List;
+      body: CustomScrollView(
+        slivers: [
+          // 1. صورة الغلاف (Backdrop)
+          SliverAppBar(
+            expandedHeight: 300,
+            pinned: true,
+            backgroundColor: const Color(0xFF111827),
+            flexibleSpace: FlexibleSpaceBar(
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // صورة الغلاف
+                  _seriesInfo?.cover != null && _seriesInfo!.cover!.isNotEmpty
+                      ? Image.network(
+                          _seriesInfo!.cover!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => Container(color: Colors.grey[900]),
+                        )
+                      : Container(color: Colors.grey[900]),
+                  // تدرج لوني لتمكين قراءة النص
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          const Color(0xFF0B0E14).withOpacity(0.9),
+                          const Color(0xFF0B0E14),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
 
-                        return ExpansionTile(
-                          title: Text(
-                            'الموسم $seasonNumber',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                          children: episodesList.map<Widget>((episode) {
-                            // استخدام episode بدلاً من episodeNum (موجودة في المكتبة)
-                            final epNum = episode.episode ?? '?';
-                            final epTitle = episode.title ?? 'حلقة $epNum';
-                            final epId = episode.id;
-                            
-                            // بناء الرابط مباشرة بدون containerExtension
-                            final streamUrl = '${widget.server}/series/${widget.username}/${widget.password}/$epId.mp4';
-                            
-                            return ListTile(
-                              leading: const Icon(Icons.play_circle_outline, color: Color(0xFFFF5238)),
-                              title: Text(
-                                'حلقة $epNum: $epTitle',
-                                style: const TextStyle(color: Colors.white70),
-                              ),
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => PlayerScreen(
-                                      streamUrl: streamUrl,
-                                      channelName: '${widget.seriesItem.name} - S$seasonNumber E$epNum',
-                                    ),
-                                  ),
-                                );
-                              },
+          // 2. معلومات المسلسل
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.seriesItem.name ?? 'المسلسل',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (_seriesInfo?.rating != null) ...[
+                        const Icon(Icons.star, color: Colors.amber, size: 20),
+                        const SizedBox(width: 4),
+                        Text(
+                          _seriesInfo!.rating!,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                        const SizedBox(width: 16),
+                      ],
+                      if (_seriesInfo?.releaseDate != null) ...[
+                        Text(
+                          _seriesInfo!.releaseDate!.substring(0, 4),
+                          style: const TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // قائمة المواسم المنسدلة
+                  if (_seasonKeys.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1F2937),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedSeason,
+                          dropdownColor: const Color(0xFF1F2937),
+                          icon: const Icon(Icons.arrow_drop_down, color: Color(0xFFFF5238)),
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          items: _seasonKeys.map((season) {
+                            return DropdownMenuItem<String>(
+                              value: season,
+                              child: Text('الموسم $season'),
                             );
                           }).toList(),
-                        );
-                      },
+                          onChanged: _onSeasonChanged,
+                        ),
+                      ),
                     ),
+                ],
+              ),
+            ),
+          ),
+
+          // 3. قائمة الحلقات
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final episode = _currentEpisodes[index];
+                final epNum = episode.episode ?? '?';
+                final epTitle = episode.title ?? 'حلقة $epNum';
+                final epId = episode.id;
+                // بناء رابط الحلقة مباشرة بدون containerExtension
+                final streamUrl = '${widget.server}/series/${widget.username}/${widget.password}/$epId.mp4';
+
+                return ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1F2937),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.play_arrow, color: Color(0xFFFF5238)),
+                  ),
+                  title: Text(
+                    'حلقة $epNum: $epTitle',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  subtitle: episode.duration != null
+                      ? Text('${episode.duration}', style: const TextStyle(color: Colors.grey, fontSize: 12))
+                      : null,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PlayerScreen(
+                          streamUrl: streamUrl,
+                          channelName: '${widget.seriesItem.name} - S$_selectedSeason E$epNum',
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+              childCount: _currentEpisodes.length,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
