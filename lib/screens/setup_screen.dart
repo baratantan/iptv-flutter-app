@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:muxa_xtream/muxa_xtream.dart';
 import 'package:http/http.dart' as http;
-import 'package:airo_m3u_parser/m3u_parser.dart';
+import 'package:airo_m3u_parser/m3u_parser.dart' as airo_m3u_parser; // التصحيح: إضافة as
 import 'home_screen.dart';
 
 class SetupScreen extends StatefulWidget {
@@ -63,8 +63,7 @@ class _SetupScreenState extends State<SetupScreen> {
         if (response.statusCode != 200) throw Exception('فشل تحميل الملف (HTTP ${response.statusCode})');
         m3uContent = response.body;
       }
-      // التصحيح: استخدام اسم الحزمة للتفريق
-      final playlist = await airo_m3u_parser.parseM3u(m3uContent);
+      final playlist = await airo_m3u_parser.parseM3uAsync(m3uContent);
       if (playlist.channels.isEmpty) throw Exception('لم يتم العثور على قنوات في ملف M3U');
       
       final prefs = await SharedPreferences.getInstance();
