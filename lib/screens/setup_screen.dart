@@ -63,8 +63,8 @@ class _SetupScreenState extends State<SetupScreen> {
         if (response.statusCode != 200) throw Exception('فشل تحميل الملف (HTTP ${response.statusCode})');
         m3uContent = response.body;
       }
-      // التصحيح: استخدام parseM3u
-      final playlist = await parseM3u(m3uContent);
+      // التصحيح: استخدام اسم الحزمة للتفريق
+      final playlist = await airo_m3u_parser.parseM3u(m3uContent);
       if (playlist.channels.isEmpty) throw Exception('لم يتم العثور على قنوات في ملف M3U');
       
       final prefs = await SharedPreferences.getInstance();
