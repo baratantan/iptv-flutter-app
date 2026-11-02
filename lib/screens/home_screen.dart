@@ -79,7 +79,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final m3uContent = prefs.getString('m3u_content') ?? '';
         if (m3uContent.isEmpty) throw Exception('لا يوجد محتوى M3U');
 
-        final playlist = await parseM3u(m3uContent);
+        // التصحيح: استخدام اسم الحزمة للتفريق
+        final playlist = await airo_m3u_parser.parseM3u(m3uContent);
         
         final List<XtLiveChannel> m3uChannels = playlist.channels.map((ch) {
           return XtLiveChannel(
