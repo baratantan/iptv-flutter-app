@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:muxa_xtream/muxa_xtream.dart';
-import 'package:airo_m3u_parser/m3u_parser.dart' as airo_m3u_parser; // التصحيح: إضافة as
+import 'package:airo_m3u_parser/m3u_parser.dart' as airo_m3u_parser;
 import 'player_screen.dart';
 import 'movie_details_screen.dart';
 import 'category_screen.dart';
@@ -79,9 +79,11 @@ class _HomeScreenState extends State<HomeScreen> {
         final m3uContent = prefs.getString('m3u_content') ?? '';
         if (m3uContent.isEmpty) throw Exception('لا يوجد محتوى M3U');
 
+        // استخدام entries بدلاً من channels
         final playlist = await airo_m3u_parser.parseM3uAsync(m3uContent);
+        final entries = playlist.entries; 
         
-        final List<XtLiveChannel> m3uChannels = playlist.channels.map((ch) {
+        final List<XtLiveChannel> m3uChannels = entries.map((ch) {
           return XtLiveChannel(
             streamId: 0,
             name: ch.name,
