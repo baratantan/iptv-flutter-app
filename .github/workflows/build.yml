@@ -32,6 +32,10 @@ jobs:
       - name: Create Flutter project
         run: flutter create --project-name iptv_flutter_app --platforms android .
 
+      - name: Fix compileSdk
+        run: |
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 37/' android/app/build.gradle.kts
+
       - name: Restore custom AndroidManifest
         run: |
           cat > android/app/src/main/AndroidManifest.xml << 'EOF'
