@@ -2,11 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:muxa_xtream/muxa_xtream.dart';
+import 'package:airo_m3u_parser/m3u_parser.dart';
 import 'player_screen.dart';
 import 'movie_details_screen.dart';
 import 'category_screen.dart';
-import 'setup_screen.dart';
-import 'series_details_screen.dart'; // استدعاء شاشة المسلسلات
+import 'series_details_screen.dart';
+import 'settings_screen.dart'; // استدعاء صفحة الإعدادات الجديدة
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -72,13 +73,44 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadAllData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final sourceType = prefs.getString('source_type') ?? 'xtream';
+
+      if (sourceType == 'm3u') {
+        // تحميل بيانات M3U
+        final m3uContent = prefs.getString('m3u_content') ?? '';
+        if (m3uContent.isEmpty) throw Exception('لا يوجد محتوى M3U');
+
+        final playlist = await parseM3UPlaylist(content: m3uContent);
+        
+        // تحويل قنوات M3U إلى كائنات متوافقة مع الواجهة
+        final List<XtLiveChannel> m3uChannels = playlist.channels.map((ch) {
+          return XtLiveChannel(
+            streamId: 0,
+            name: ch.name,
+            streamIcon: ch.logo,
+            categoryId: 0,
+          );
+        }).toList();
+
+        setState(() {
+          _allLiveChannels = m3uChannels;
+          _latestChannels = m3uChannels.take(12).toList();
+          _allMovies = [];
+          _allSeries = [];
+          _moviesForBanner = [];
+          _latestMovies = [];
+          _latestSeries = [];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // إذا كان xtream
       _server = prefs.getString('xtream_server') ?? '';
       _username = prefs.getString('xtream_username') ?? '';
       _password = prefs.getString('xtream_password') ?? '';
 
-      if (_server.isEmpty) {
-        throw Exception('لم يتم العثور على بيانات الاتصال');
-      }
+      if (_server.isEmpty) throw Exception('لم يتم العثور على بيانات الاتصال');
 
       final portal = XtreamPortal.parse(_server);
       final credentials = XtreamCredentials(username: _username, password: _password);
@@ -179,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _buildChannelsTab(),
       _buildMediaGrid(_allMovies, 'movie'), 
       _buildMediaGrid(_allSeries, 'series'), 
-      const SizedBox(),
+      const SizedBox(), // صفحة فارغة للزر الخامس (لن يتم الوصول إليها لأننا نفتح الإعدادات مباشرة)
     ];
 
     return Scaffold(
@@ -195,8 +227,9 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentTabIndex,
         onTap: (index) {
           if (index == 4) {
+            // فتح صفحة الإعدادات الجديدة
             Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SetupScreen()),
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
             );
           } else {
             setState(() {
@@ -381,7 +414,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   } else if (type == 'channel') {
                     _playStream(streamUrl, name);
                   } else {
-                    // فتح شاشة المسلسل
                     _openSeriesDetails(item);
                   }
                 },
@@ -464,7 +496,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 final streamUrl = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
                 _openMovieDetails(name, streamUrl, poster);
               } else {
-                // فتح شاشة المسلسل
                 _openSeriesDetails(item);
               }
             },
