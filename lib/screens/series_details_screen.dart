@@ -24,10 +24,9 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
   
-  // بيانات المسلسل
   XtSeriesDetails? _seriesInfo;
-  List<String> _seasonKeys = [];
-  String? _selectedSeason;
+  List<int> _seasonKeys = []; // تغيير النوع إلى int
+  int? _selectedSeason;
   List<dynamic> _currentEpisodes = [];
 
   @override
@@ -47,8 +46,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
       setState(() {
         _seriesInfo = info;
         if (info != null && info.seasons != null && info.seasons!.isNotEmpty) {
-          _seasonKeys = info.seasons!.keys.toList();
-          // اختيار الموسم الأول تلقائياً
+          _seasonKeys = info.seasons!.keys.toList(); // الآن هي List<int>
           _selectedSeason = _seasonKeys.first;
           _currentEpisodes = info.seasons![_selectedSeason] ?? [];
         }
@@ -62,7 +60,7 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
     }
   }
 
-  void _onSeasonChanged(String? season) {
+  void _onSeasonChanged(int? season) {
     if (season == null) return;
     setState(() {
       _selectedSeason = season;
@@ -93,15 +91,14 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // صورة الغلاف
-                  _seriesInfo?.cover != null && _seriesInfo!.cover!.isNotEmpty
+                  // التصحيح: استخدام posterUrl بدلاً من cover
+                  _seriesInfo?.posterUrl != null && _seriesInfo!.posterUrl!.isNotEmpty
                       ? Image.network(
-                          _seriesInfo!.cover!,
+                          _seriesInfo!.posterUrl!,
                           fit: BoxFit.cover,
                           errorBuilder: (c, e, s) => Container(color: Colors.grey[900]),
                         )
                       : Container(color: Colors.grey[900]),
-                  // تدرج لوني لتمكين قراءة النص
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -138,11 +135,12 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
+                      // التصحيح: تحويل rating من double إلى String
                       if (_seriesInfo?.rating != null) ...[
                         const Icon(Icons.star, color: Colors.amber, size: 20),
                         const SizedBox(width: 4),
                         Text(
-                          _seriesInfo!.rating!,
+                          _seriesInfo!.rating!.toStringAsFixed(1),
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                         ),
                         const SizedBox(width: 16),
@@ -165,13 +163,13 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
+                        child: DropdownButton<int>(
                           value: _selectedSeason,
                           dropdownColor: const Color(0xFF1F2937),
                           icon: const Icon(Icons.arrow_drop_down, color: Color(0xFFFF5238)),
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                           items: _seasonKeys.map((season) {
-                            return DropdownMenuItem<String>(
+                            return DropdownMenuItem<int>(
                               value: season,
                               child: Text('الموسم $season'),
                             );
@@ -193,7 +191,6 @@ class _SeriesDetailsScreenState extends State<SeriesDetailsScreen> {
                 final epNum = episode.episode ?? '?';
                 final epTitle = episode.title ?? 'حلقة $epNum';
                 final epId = episode.id;
-                // بناء رابط الحلقة مباشرة بدون containerExtension
                 final streamUrl = '${widget.server}/series/${widget.username}/${widget.password}/$epId.mp4';
 
                 return ListTile(
