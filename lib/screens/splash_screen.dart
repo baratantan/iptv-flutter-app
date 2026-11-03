@@ -22,23 +22,24 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
+    // تقليل مدة الحركة إلى 1.5 ثانية
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2500),
+      duration: const Duration(milliseconds: 1500),
     );
 
     // 1. حركة الأيقونة (تكبير + ظهور)
     _iconScaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
+        curve: const Interval(0.0, 0.7, curve: Curves.easeOutBack),
       ),
     );
 
     _iconFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.4, curve: Curves.easeIn),
+        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
       ),
     );
 
@@ -49,25 +50,24 @@ class _SplashScreenState extends State<SplashScreen>
     ).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.5, 1.0, curve: Curves.easeOut),
+        curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
       ),
     );
 
     _textFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.5, 1.0, curve: Curves.easeIn),
+        curve: const Interval(0.4, 1.0, curve: Curves.easeIn),
       ),
     );
 
-    // بدء الحركة فوراً
     _controller.forward();
     _navigateToNextScreen();
   }
 
   Future<void> _navigateToNextScreen() async {
-    // الانتظار حتى تنتهي الحركة (3 ثوانٍ)
-    await Future.delayed(const Duration(milliseconds: 3000));
+    // تقليل وقت الانتظار إلى 2.2 ثانية فقط
+    await Future.delayed(const Duration(milliseconds: 2200));
     if (!mounted) return;
 
     final prefs = await SharedPreferences.getInstance();
@@ -102,55 +102,66 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // 1. الأيقونة المتحركة
-            ScaleTransition(
-              scale: _iconScaleAnimation,
-              child: FadeTransition(
-                opacity: _iconFadeAnimation,
-                child: Image.asset(
-                  'app_icon.png',
-                  width: 180,
-                  height: 180,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFF1A0A0A), // أحمر داكن جداً (نفس شاشة الإعدادات)
+              const Color(0xFF0B0E14), // أسود
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // 1. الأيقونة المتحركة
+              ScaleTransition(
+                scale: _iconScaleAnimation,
+                child: FadeTransition(
+                  opacity: _iconFadeAnimation,
+                  child: Image.asset(
+                    'app_icon.png',
+                    width: 150,
+                    height: 150,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 32),
-            
-            // 2. اسم التطبيق (ينزلق من الأسفل)
-            SlideTransition(
-              position: _textSlideAnimation,
-              child: FadeTransition(
-                opacity: _textFadeAnimation,
-                child: const Column(
-                  children: [
-                    Text(
-                      'Player Pro',
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 2,
+              const SizedBox(height: 24),
+              
+              // 2. اسم التطبيق (ينزلق من الأسفل)
+              SlideTransition(
+                position: _textSlideAnimation,
+                child: FadeTransition(
+                  opacity: _textFadeAnimation,
+                  child: const Column(
+                    children: [
+                      Text(
+                        'Player Pro',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 2,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'مشغل احترافي',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFF9CA3AF),
-                        letterSpacing: 1,
+                      SizedBox(height: 8),
+                      Text(
+                        'مشغل احترافي',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF9CA3AF),
+                          letterSpacing: 1,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
