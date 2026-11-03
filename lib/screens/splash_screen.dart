@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'setup_screen.dart';
 import 'home_screen.dart';
+import 'setup_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -14,9 +14,10 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _glowAnimation;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation;
+  late Animation<double> _iconScaleAnimation;
+  late Animation<double> _iconFadeAnimation;
+  late Animation<double> _textFadeAnimation;
+  late Animation<Offset> _textSlideAnimation;
 
   @override
   void initState() {
@@ -26,30 +27,61 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 2500),
     );
 
-    _glowAnimation = Tween<double>(begin: 4.0, end: 24.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    // 1. حركة الأيقونة (تكبير + ظهور)
+    _iconScaleAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
+      ),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    _iconFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.4, curve: Curves.easeIn),
+      ),
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    // 2. حركة النص (انزلاق من الأسفل + ظهور)
+    _textSlideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.5),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.5, 1.0, curve: Curves.easeOut),
+      ),
+    );
+
+    _textFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.5, 1.0, curve: Curves.easeIn),
+      ),
     );
 
     _controller.forward();
-    _checkLoginStatus();
+    _navigateToNextScreen();
   }
 
-  Future<void> _checkLoginStatus() async {
+  Future<void> _navigateToNextScreen() async {
+    // الانتظار حتى تنتهي الحركة (3 ثوانٍ)
     await Future.delayed(const Duration(milliseconds: 3000));
     if (!mounted) return;
 
     final prefs = await SharedPreferences.getInstance();
+    final sourceType = prefs.getString('source_type') ?? '';
     final server = prefs.getString('xtream_server') ?? '';
+    final m3uContent = prefs.getString('m3u_content') ?? '';
 
-    if (server.isNotEmpty) {
+    bool hasData = false;
+    if (sourceType == 'xtream' && server.isNotEmpty) {
+      hasData = true;
+    } else if (sourceType == 'm3u' && m3uContent.isNotEmpty) {
+      hasData = true;
+    }
+
+    if (hasData) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
@@ -69,57 +101,36 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.center,
-            radius: 1.2,
-            colors: [
-              Color(0xFF1F2937),
-              Color(0xFF0B0E14),
-            ],
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedBuilder(
-                animation: _controller,
-                builder: (context, child) {
-                  return Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFFF5238).withOpacity(0.5),
-                          blurRadius: _glowAnimation.value,
-                          spreadRadius: _glowAnimation.value / 2,
-                        ),
-                      ],
-                    ),
-                    child: ScaleTransition(
-                      scale: _scaleAnimation,
-                      child: const Icon(
-                        Icons.live_tv,
-                        size: 100,
-                        color: Color(0xFFFF5238),
-                      ),
-                    ),
-                  );
-                },
+      backgroundColor: Colors.black, // خلفية سوداء
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 1. الأيقونة البانورامية
+            ScaleTransition(
+              scale: _iconScaleAnimation,
+              child: FadeTransition(
+                opacity: _iconFadeAnimation,
+                child: Image.asset(
+                  'app_icon.png',
+                  width: 180,
+                  height: 180,
+                ),
               ),
-              const SizedBox(height: 32),
-              FadeTransition(
-                opacity: _fadeAnimation,
+            ),
+            const SizedBox(height: 32),
+            
+            // 2. اسم التطبيق (ينزلق من الأسفل)
+            SlideTransition(
+              position: _textSlideAnimation,
+              child: FadeTransition(
+                opacity: _textFadeAnimation,
                 child: const Column(
                   children: [
                     Text(
-                      'IPTV Player',
+                      'Player Pro',
                       style: TextStyle(
-                        fontSize: 28,
+                        fontSize: 36,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                         letterSpacing: 2,
@@ -129,7 +140,7 @@ class _SplashScreenState extends State<SplashScreen>
                     Text(
                       'مشغل احترافي',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 16,
                         color: Color(0xFF9CA3AF),
                         letterSpacing: 1,
                       ),
@@ -137,8 +148,8 @@ class _SplashScreenState extends State<SplashScreen>
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
