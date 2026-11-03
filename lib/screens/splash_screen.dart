@@ -28,7 +28,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     // 1. حركة الأيقونة (تكبير + ظهور)
-    _iconScaleAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+    _iconScaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
@@ -60,6 +60,7 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
+    // بدء الحركة فوراً
     _controller.forward();
     _navigateToNextScreen();
   }
@@ -101,12 +102,12 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // خلفية سوداء
+      backgroundColor: Colors.black,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 1. الأيقونة البانورامية
+            // 1. الأيقونة المتحركة
             ScaleTransition(
               scale: _iconScaleAnimation,
               child: FadeTransition(
