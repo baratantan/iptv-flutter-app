@@ -8,6 +8,7 @@ import 'movie_details_screen.dart';
 import 'category_screen.dart';
 import 'series_details_screen.dart';
 import 'settings_screen.dart';
+import 'addons_screen.dart'; // استدعاء شاشة الإضافات
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -79,7 +80,6 @@ class _HomeScreenState extends State<HomeScreen> {
         final m3uContent = prefs.getString('m3u_content') ?? '';
         if (m3uContent.isEmpty) throw Exception('لا يوجد محتوى M3U');
 
-        // استخدام entries بدلاً من channels
         final playlist = await airo_m3u_parser.parseM3uAsync(m3uContent);
         final entries = playlist.entries; 
         
@@ -205,12 +205,14 @@ class _HomeScreenState extends State<HomeScreen> {
       return Scaffold(body: Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.red))));
     }
 
+    // إضافة صفحة الإضافات إلى قائمة الصفحات
     final List<Widget> pages = [
       _buildHomeTab(),
       _buildChannelsTab(),
       _buildMediaGrid(_allMovies, 'movie'), 
       _buildMediaGrid(_allSeries, 'series'), 
-      const SizedBox(),
+      const AddonsScreen(), // تبويب الإضافات
+      const SizedBox(), // صفحة فارغة للزر السادس (الإعدادات)
     ];
 
     return Scaffold(
@@ -224,8 +226,10 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedItemColor: const Color(0xFFFF5238),
         unselectedItemColor: Colors.grey,
         currentIndex: _currentTabIndex,
+        type: BottomNavigationBarType.fixed, // مهم: لأن لدينا 6 أزرار
         onTap: (index) {
-          if (index == 4) {
+          if (index == 5) {
+            // فتح صفحة الإعدادات
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
             );
@@ -235,12 +239,12 @@ class _HomeScreenState extends State<HomeScreen> {
             });
           }
         },
-        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
           BottomNavigationBarItem(icon: Icon(Icons.live_tv), label: 'القنوات'),
           BottomNavigationBarItem(icon: Icon(Icons.movie), label: 'الأفلام'),
           BottomNavigationBarItem(icon: Icon(Icons.video_library), label: 'المسلسلات'),
+          BottomNavigationBarItem(icon: Icon(Icons.extension), label: 'الإضافات'),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'الإعدادات'),
         ],
       ),
