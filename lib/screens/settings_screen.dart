@@ -43,12 +43,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.remove('xtream_password');
     await prefs.remove('m3u_content');
     await prefs.remove('m3u_url');
+    await prefs.remove('addon_url'); // مسح رابط الإضافة أيضاً
 
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const SetupScreen()),
         (route) => false,
       );
+    }
+  }
+
+  Future<void> _editAddonUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentUrl = prefs.getString('addon_url') ?? '';
+    final controller = TextEditingController(text: currentUrl);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text('رابط الإضافة', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'https://example.com/manifest.json',
+            hintStyle: TextStyle(color: Colors.grey),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFF5238))),
+          ),
+          textDirection: TextDirection.ltr,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('حفظ', style: TextStyle(color: Color(0xFFFF5238))),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      await prefs.setString('addon_url', result);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حفظ رابط الإضافة بنجاح')),
+        );
+      }
     }
   }
 
@@ -126,6 +171,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
+          // قسم الإضافات (جديد)
+          const Text(
+            'الإضافات',
+            style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1F2937),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.extension, color: Color(0xFFFF5238)),
+                  title: const Text('إدارة الإضافة', style: TextStyle(color: Colors.white)),
+                  subtitle: const Text('أضف رابط الإضافة (Addon URL)', style: TextStyle(color: Colors.grey)),
+                  trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
+                  onTap: _editAddonUrl,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
           // قسم حول التطبيق
           const Text(
             'حول التطبيق',
@@ -142,7 +213,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.apps, color: Color(0xFFFF5238)),
                   title: const Text('اسم التطبيق', style: TextStyle(color: Colors.white)),
-                  subtitle: const Text('IPTV Player', style: TextStyle(color: Colors.grey)),
+                  subtitle: const Text('Player Pro', style: TextStyle(color: Colors.grey)),
                 ),
                 const Divider(height: 1, color: Colors.grey),
                 ListTile(
