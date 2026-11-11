@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -16,16 +17,51 @@ class _AddonsScreenState extends State<AddonsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   
+  // بيانات
   Map<String, List<AddonCatalogItem>> _catalogContents = {};
+  List<AddonCatalogItem> _allMovies = [];
+  List<AddonCatalogItem> _allSeries = [];
   
-  // خرائط لربط كل عنصر بمعلومات الإضافة والنوع
+  // خرائط ربط
   Map<String, String> _itemToAddonUrl = {};
-  Map<String, String> _itemToType = {}; // 'movie' أو 'series'
+  Map<String, String> _itemToType = {};
+
+  // للتحكم في البانر التلقائي
+  final PageController _pageController = PageController(viewportFraction: 0.9);
+  int _currentBannerIndex = 0;
+  Timer? _bannerTimer;
 
   @override
   void initState() {
     super.initState();
     _loadAllAddonsData();
+  }
+
+  @override
+  void dispose() {
+    _bannerTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _startBannerAutoPlay(List<AddonCatalogItem> bannerItems) {
+    _bannerTimer?.cancel();
+    if (bannerItems.isEmpty) return;
+
+    _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (_pageController.hasClients) {
+        if (_currentBannerIndex < bannerItems.length - 1) {
+          _currentBannerIndex++;
+        } else {
+          _currentBannerIndex = 0;
+        }
+        _pageController.animateToPage(
+          _currentBannerIndex,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeIn,
+        );
+      }
+    });
   }
 
   Future<void> _loadAllAddonsData() async {
@@ -54,6 +90,8 @@ class _AddonsScreenState extends State<AddonsScreen> {
       }
 
       Map<String, List<AddonCatalogItem>> catalogContents = {};
+      List<AddonCatalogItem> allMovies = [];
+      List<AddonCatalogItem> allSeries = [];
       Map<String, String> itemToAddonUrl = {};
       Map<String, String> itemToType = {};
 
@@ -81,10 +119,15 @@ class _AddonsScreenState extends State<AddonsScreen> {
                 final key = '${manifest.name} - ${catalog.name}';
                 catalogContents[key] = items;
 
-                // ربط كل عنصر بمعلومات الإضافة والنوع
                 for (var item in items) {
                   itemToAddonUrl[item.id] = addon.url;
-                  itemToType[item.id] = catalog.type; // 'movie' أو 'series'
+                  itemToType[item.id] = catalog.type;
+                  
+                  if (catalog.type == 'movie') {
+                    allMovies.add(item);
+                  } else if (catalog.type == 'series') {
+                    allSeries.add(item);
+                  }
                 }
               }
             } catch (e) {
@@ -98,6 +141,8 @@ class _AddonsScreenState extends State<AddonsScreen> {
 
       setState(() {
         _catalogContents = catalogContents;
+        _allMovies = allMovies;
+        _allSeries = allSeries;
         _itemToAddonUrl = itemToAddonUrl;
         _itemToType = itemToType;
         _isLoading = false;
@@ -105,6 +150,11 @@ class _AddonsScreenState extends State<AddonsScreen> {
           _errorMessage = 'لم يتم العثور على محتوى في الإضافات النشطة.';
         }
       });
+
+      // بدء الحركة التلقائية للبانر
+      List<AddonCatalogItem> bannerItems = [];
+      catalogContents.forEach((key, list) => bannerItems.addAll(list));
+      _startBannerAutoPlay(bannerItems.take(6).toList());
 
     } catch (e) {
       setState(() {
@@ -126,7 +176,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
     }
 
     if (type == 'movie') {
-      // فيلم: فتح روابط البث مباشرة
       showModalBottomSheet(
         context: context,
         backgroundColor: const Color(0xFF1F2937),
@@ -134,7 +183,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
         builder: (context) => _buildStreamsSheet(addonUrl, item, 'movie'),
       );
     } else {
-      // مسلسل: فتح قائمة الحلقات
       showModalBottomSheet(
         context: context,
         backgroundColor: const Color(0xFF1F2937),
@@ -144,7 +192,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
     }
   }
 
-  // جلب الحلقات لمسلسل
   Future<List<Map<String, dynamic>>> _fetchEpisodes(String addonUrl, AddonCatalogItem series) async {
     final metaUrl = '$addonUrl/meta/series/${series.id}.json';
     final response = await http.get(Uri.parse(metaUrl));
@@ -161,7 +208,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
       'title': v['title'] ?? v['name'] ?? 'حلقة',
       'season': v['season'] ?? 0,
       'episode': v['episode'] ?? 0,
-      'thumbnail': v['thumbnail'],
     }).toList();
   }
 
@@ -170,28 +216,17 @@ class _AddonsScreenState extends State<AddonsScreen> {
       future: _fetchEpisodes(addonUrl, series),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 200,
-            child: Center(child: CircularProgressIndicator(color: Color(0xFFFF5238))),
-          );
+          return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: Color(0xFFFF5238))));
         }
-
         if (snapshot.hasError) {
-          return SizedBox(
-            height: 200,
-            child: Center(child: Text('فشل: ${snapshot.error}', style: const TextStyle(color: Colors.red))),
-          );
+          return SizedBox(height: 200, child: Center(child: Text('فشل: ${snapshot.error}', style: const TextStyle(color: Colors.red))));
         }
 
         final episodes = snapshot.data ?? [];
         if (episodes.isEmpty) {
-          return const SizedBox(
-            height: 200,
-            child: Center(child: Text('لا توجد حلقات متاحة', style: TextStyle(color: Colors.grey))),
-          );
+          return const SizedBox(height: 200, child: Center(child: Text('لا توجد حلقات متاحة', style: TextStyle(color: Colors.grey))));
         }
 
-        // تجميع الحلقات حسب الموسم
         Map<int, List<Map<String, dynamic>>> seasons = {};
         for (var ep in episodes) {
           final s = ep['season'] as int? ?? 0;
@@ -223,8 +258,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
                           leading: const Icon(Icons.play_circle_outline, color: Color(0xFFFF5238)),
                           title: Text(epTitle, style: const TextStyle(color: Colors.white70)),
                           onTap: () {
-                            Navigator.pop(context); // إغلاق نافذة الحلقات
-                            // فتح روابط البث للحلقة المحددة
+                            Navigator.pop(context);
                             showModalBottomSheet(
                               context: context,
                               backgroundColor: const Color(0xFF1F2937),
@@ -245,7 +279,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
     );
   }
 
-  // جلب روابط البث (للفيلم أو الحلقة)
   Future<List<Map<String, dynamic>>> _fetchStreams(String addonUrl, String type, String videoId) async {
     final streamUrl = '$addonUrl/stream/$type/$videoId.json';
     final response = await http.get(Uri.parse(streamUrl));
@@ -264,31 +297,21 @@ class _AddonsScreenState extends State<AddonsScreen> {
   }
 
   Widget _buildStreamsSheet(String addonUrl, AddonCatalogItem item, String type, {String? videoId}) {
-    final idToUse = videoId ?? item.id; // للفيلم: id، للمسلسل: videoId
+    final idToUse = videoId ?? item.id;
     
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _fetchStreams(addonUrl, type, idToUse),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 200,
-            child: Center(child: CircularProgressIndicator(color: Color(0xFFFF5238))),
-          );
+          return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: Color(0xFFFF5238))));
         }
-
         if (snapshot.hasError) {
-          return SizedBox(
-            height: 200,
-            child: Center(child: Text('فشل: ${snapshot.error}', style: const TextStyle(color: Colors.red))),
-          );
+          return SizedBox(height: 200, child: Center(child: Text('فشل: ${snapshot.error}', style: const TextStyle(color: Colors.red))));
         }
 
         final streams = snapshot.data ?? [];
         if (streams.isEmpty) {
-          return const SizedBox(
-            height: 200,
-            child: Center(child: Text('لا توجد روابط متاحة', style: TextStyle(color: Colors.grey))),
-          );
+          return const SizedBox(height: 200, child: Center(child: Text('لا توجد روابط متاحة', style: TextStyle(color: Colors.grey))));
         }
 
         return Container(
@@ -310,20 +333,14 @@ class _AddonsScreenState extends State<AddonsScreen> {
                     final isTorrent = url.startsWith('magnet:');
 
                     return ListTile(
-                      leading: Icon(
-                        isTorrent ? Icons.cloud_download : Icons.play_circle,
-                        color: const Color(0xFFFF5238),
-                      ),
+                      leading: Icon(isTorrent ? Icons.cloud_download : Icons.play_circle, color: const Color(0xFFFF5238)),
                       title: Text(title, style: const TextStyle(color: Colors.white)),
                       subtitle: Text(isTorrent ? 'تورنت (P2P)' : 'رابط مباشر', style: const TextStyle(color: Colors.grey)),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => PlayerScreen(
-                              streamUrl: url,
-                              channelName: item.name,
-                            ),
+                            builder: (_) => PlayerScreen(streamUrl: url, channelName: item.name),
                           ),
                         );
                       },
@@ -345,86 +362,116 @@ class _AddonsScreenState extends State<AddonsScreen> {
     }
 
     if (_errorMessage != null) {
-      return Scaffold(
-        body: Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red))),
-      );
+      return Scaffold(body: Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red))));
     }
 
+    // تجميع كل الأفلام والمسلسلات للبانر
     List<AddonCatalogItem> allItems = [];
     _catalogContents.forEach((key, list) => allItems.addAll(list));
     final bannerItems = allItems.take(6).toList();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0B0E14),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 320,
-              child: PageView.builder(
-                itemCount: bannerItems.length,
-                itemBuilder: (context, index) {
-                  final item = bannerItems[index];
-                  return GestureDetector(
-                    onTap: () => _playItem(item),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0B0E14),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF111827),
+          title: const Text('الإضافات'),
+          bottom: const TabBar(
+            indicatorColor: Color(0xFFFF5238),
+            labelColor: Color(0xFFFF5238),
+            unselectedLabelColor: Colors.grey,
+            tabs: [
+              Tab(text: 'الرئيسية'),
+              Tab(text: 'الأفلام'),
+              Tab(text: 'المسلسلات'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            // 1. الرئيسية (بانر + شرائط)
+            _buildHomeTab(bannerItems),
+            // 2. الأفلام (شبكة)
+            _buildMediaGrid(_allMovies, 'movie'),
+            // 3. المسلسلات (شبكة)
+            _buildMediaGrid(_allSeries, 'series'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeTab(List<AddonCatalogItem> bannerItems) {
+    return CustomScrollView(
+      slivers: [
+        // البانر
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 320,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: bannerItems.length,
+              onPageChanged: (index) {
+                _currentBannerIndex = index;
+              },
+              itemBuilder: (context, index) {
+                final item = bannerItems[index];
+                return GestureDetector(
+                  onTap: () => _playItem(item),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 5.0),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      image: DecorationImage(
+                        image: NetworkImage(item.poster ?? ''),
+                        fit: BoxFit.cover,
+                        onError: (e, s) {},
+                      ),
+                    ),
                     child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 5.0),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
-                        image: DecorationImage(
-                          image: NetworkImage(item.poster ?? ''),
-                          fit: BoxFit.cover,
-                          onError: (e, s) {},
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
                         ),
                       ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.name,
-                                style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 8),
+                            ElevatedButton.icon(
+                              onPressed: () => _playItem(item),
+                              icon: const Icon(Icons.play_arrow),
+                              label: const Text('تشغيل'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFF5238),
+                                foregroundColor: Colors.white,
                               ),
-                              const SizedBox(height: 8),
-                              ElevatedButton.icon(
-                                onPressed: () => _playItem(item),
-                                icon: const Icon(Icons.play_arrow),
-                                label: const Text('تشغيل'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFF5238),
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
           ),
-          ..._catalogContents.entries.map((entry) {
-            return SliverToBoxAdapter(
-              child: _buildHorizontalSection(entry.key, entry.value),
-            );
-          }).toList(),
-        ],
-      ),
+        ),
+        // الشرائط
+        ..._catalogContents.entries.map((entry) {
+          return SliverToBoxAdapter(
+            child: _buildHorizontalSection(entry.key, entry.value),
+          );
+        }).toList(),
+      ],
     );
   }
 
@@ -463,13 +510,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
                         ),
                         Padding(
                           padding: const EdgeInsets.all(4.0),
-                          child: Text(
-                            item.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 11, color: Colors.white),
-                          ),
+                          child: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white)),
                         ),
                       ],
                     ),
@@ -480,6 +521,44 @@ class _AddonsScreenState extends State<AddonsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMediaGrid(List<AddonCatalogItem> items, String type) {
+    if (items.isEmpty) return const Center(child: Text('لا توجد عناصر', style: TextStyle(color: Colors.grey)));
+
+    return SafeArea(
+      child: GridView.builder(
+        padding: const EdgeInsets.all(8),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          childAspectRatio: 0.65,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+        ),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return GestureDetector(
+            onTap: () => _playItem(item),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: (item.poster != null && item.poster!.isNotEmpty)
+                        ? Image.network(item.poster!, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)))
+                        : Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
