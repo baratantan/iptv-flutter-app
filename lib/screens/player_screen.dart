@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:local_pip/local_pip.dart';
+import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 
 class PlayerScreen extends StatefulWidget {
   final String streamUrl;
@@ -20,41 +21,78 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late final Player player;
   late final VideoController controller;
-  final LocalPip _localPip = LocalPip();
-  bool _isPipAvailable = false;
+
+  bool _isLoading = true;
+  String? _errorMessage;
+  String? _localStreamUrl;
+  int? _torrentId;
+  StreamSubscription? _torrentSubscription;
 
   @override
   void initState() {
     super.initState();
     player = Player();
     controller = VideoController(player);
-    player.open(Media(widget.streamUrl));
-    _checkPipAvailability();
+    _initializeStream();
   }
 
-  Future<void> _checkPipAvailability() async {
+  Future<void> _initializeStream() async {
     try {
-      final available = await _localPip.isPipAvailable();
-      if (mounted) {
-        setState(() {
-          _isPipAvailable = available;
-        });
+      if (widget.streamUrl.startsWith('magnet:')) {
+        await _initTorrentStream(widget.streamUrl);
+      } else {
+        _localStreamUrl = widget.streamUrl;
+        await _playMedia(_localStreamUrl!);
       }
     } catch (e) {
-      debugPrint('PiP check failed: $e');
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
     }
   }
 
-  Future<void> _enterPipMode() async {
-    try {
-      await _localPip.enterPipMode();
-    } catch (e) {
-      debugPrint('Failed to enter PiP: $e');
+  Future<void> _initTorrentStream(String magnetUrl) async {
+    final id = LibtorrentFlutter.instance.addMagnet(magnetUrl);
+    _torrentId = id;
+
+    final completer = Completer<void>();
+
+    _torrentSubscription = LibtorrentFlutter.instance.torrentUpdates.listen((torrents) {
+      final t = torrents[id];
+      if (t == null) return;
+
+      if (t.hasMetadata && !completer.isCompleted) {
+        completer.complete();
+      }
+    });
+
+    await completer.future;
+
+    final stream = LibtorrentFlutter.instance.startStream(
+      id,
+      maxCacheBytes: 500 * 1024 * 1024,
+    );
+
+    _localStreamUrl = stream.url;
+    await _playMedia(_localStreamUrl!);
+  }
+
+  Future<void> _playMedia(String url) async {
+    await player.open(Media(url));
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
   @override
   void dispose() {
+    _torrentSubscription?.cancel();
+    if (_torrentId != null) {
+      LibtorrentFlutter.instance.removeTorrent(_torrentId!, deleteFiles: true);
+    }
     player.dispose();
     super.dispose();
   }
@@ -67,21 +105,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         title: Text(widget.channelName),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        actions: [
-          if (_isPipAvailable)
-            IconButton(
-              icon: const Icon(Icons.picture_in_picture_alt),
-              onPressed: _enterPipMode,
-              tooltip: 'صورة داخل صورة',
-            ),
-        ],
       ),
-      body: Center(
-        child: Video(
-          controller: controller,
-          controls: AdaptiveVideoControls,
-        ),
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF5238)))
+          : _errorMessage != null
+              ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)))
+              : Center(
+                  child: Video(
+                    controller: controller,
+                    controls: AdaptiveVideoControls,
+                  ),
+                ),
     );
   }
 }
