@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:muxa_xtream/muxa_xtream.dart';
 import 'package:airo_m3u_parser/m3u_parser.dart' as airo_m3u_parser;
+import '../services/data_service.dart';
 import 'player_screen.dart';
 import 'movie_details_screen.dart';
 import 'category_screen.dart';
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
   
+  // البيانات (من DataService)
   List<XtLiveChannel> _allLiveChannels = []; 
   List<XtVodItem> _allMovies = [];
   List<XtSeriesItem> _allSeries = [];
@@ -39,14 +41,12 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentPage = 0;
   Timer? _timer;
   int _currentTabIndex = 0;
-
-  // متغير لإجبار صفحة الإضافات على إعادة التحميل
   int _addonsKey = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadAllData();
+    _loadData();
     _startAutoPlay();
   }
 
@@ -74,12 +74,13 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _loadAllData() async {
+  Future<void> _loadData({bool forceRefresh = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final sourceType = prefs.getString('source_type') ?? 'xtream';
 
       if (sourceType == 'm3u') {
+        // بيانات M3U (لا تخضع للتخزين المؤقت حالياً)
         final m3uContent = prefs.getString('m3u_content') ?? '';
         if (m3uContent.isEmpty) throw Exception('لا يوجد محتوى M3U');
 
@@ -108,27 +109,27 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      // بيانات Xtream
       _server = prefs.getString('xtream_server') ?? '';
       _username = prefs.getString('xtream_username') ?? '';
       _password = prefs.getString('xtream_password') ?? '';
 
       if (_server.isEmpty) throw Exception('لم يتم العثور على بيانات الاتصال');
 
-      final portal = XtreamPortal.parse(_server);
-      final credentials = XtreamCredentials(username: _username, password: _password);
-      final client = XtreamClient(portal, credentials);
+      // استخدام DataService (مع التخزين المؤقت)
+      await DataService.loadXtreamData(
+        server: _server,
+        username: _username,
+        password: _password,
+        forceRefresh: forceRefresh,
+      );
 
-      final results = await Future.wait([
-        client.getLiveStreams(),
-        client.getVodStreams(),
-        client.getSeries(),
-        client.getVodCategories(),
-        client.getSeriesCategories(),
-      ]);
-
-      final allLive = (results[0] as List).cast<XtLiveChannel>();
-      final allMovies = (results[1] as List).cast<XtVodItem>();
-      final allSeries = (results[2] as List).cast<XtSeriesItem>();
+      // قراءة البيانات من DataService
+      final allLive = DataService.liveChannels ?? [];
+      final allMovies = DataService.movies ?? [];
+      final allSeries = DataService.series ?? [];
+      final vodCategories = DataService.vodCategories ?? [];
+      final seriesCategories = DataService.seriesCategories ?? [];
 
       setState(() {
         _allLiveChannels = allLive;
@@ -139,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _latestMovies = allMovies.take(12).toList();
         _latestSeries = allSeries.take(12).toList();
         _latestChannels = allLive.take(12).toList();
-        _categories = (results[3] as List).cast<XtCategory>(); 
+        _categories = vodCategories;
         
         _isLoading = false;
       });
@@ -208,13 +209,12 @@ class _HomeScreenState extends State<HomeScreen> {
       return Scaffold(body: Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.red))));
     }
 
-    // إضافة صفحة الإضافات مع Key متغير لإعادة التحميل
     final List<Widget> pages = [
       _buildHomeTab(),
       _buildChannelsTab(),
       _buildMediaGrid(_allMovies, 'movie'), 
       _buildMediaGrid(_allSeries, 'series'), 
-      AddonsScreen(key: ValueKey(_addonsKey)), // Key متغير
+      AddonsScreen(key: ValueKey(_addonsKey)), 
       const SizedBox(),
     ];
 
@@ -232,11 +232,9 @@ class _HomeScreenState extends State<HomeScreen> {
         type: BottomNavigationBarType.fixed,
         onTap: (index) {
           if (index == 5) {
-            // فتح صفحة الإعدادات
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
             ).then((_) {
-              // عند العودة من الإعدادات، قم بتحديث صفحة الإضافات
               setState(() {
                 _addonsKey++;
               });
@@ -244,7 +242,6 @@ class _HomeScreenState extends State<HomeScreen> {
           } else {
             setState(() {
               _currentTabIndex = index;
-              // إذا كان التبويب المختار هو الإضافات، قم بتحديثه
               if (index == 4) {
                 _addonsKey++;
               }
@@ -269,6 +266,24 @@ class _HomeScreenState extends State<HomeScreen> {
         ListView(
           padding: const EdgeInsets.only(top: 40),
           children: [
+            // زر التحديث (اختياري، لإجبار جلب بيانات جديدة)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('المكتبة', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Color(0xFFFF5238)),
+                    onPressed: () async {
+                      setState(() => _isLoading = true);
+                      await _loadData(forceRefresh: true);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            
             if (_moviesForBanner.isNotEmpty)
               SizedBox(
                 height: 320,
