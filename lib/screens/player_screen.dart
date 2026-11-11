@@ -39,8 +39,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _initializeStream() async {
     try {
       if (widget.streamUrl.startsWith('magnet:')) {
+        // رابط تورنت: نحوله إلى رابط HTTP محلي
         await _initTorrentStream(widget.streamUrl);
       } else {
+        // رابط HTTP مباشر: نشغله مباشرة
         _localStreamUrl = widget.streamUrl;
         await _playMedia(_localStreamUrl!);
       }
@@ -53,9 +55,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _initTorrentStream(String magnetUrl) async {
+    // 1. إضافة رابط المغناطيس
     final id = LibtorrentFlutter.instance.addMagnet(magnetUrl);
     _torrentId = id;
 
+    // 2. الانتظار حتى تصبح البيانات الوصفية جاهزة
     final completer = Completer<void>();
 
     _torrentSubscription = LibtorrentFlutter.instance.torrentUpdates.listen((torrents) {
@@ -69,9 +73,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     await completer.future;
 
+    // 3. بدء البث (يختار أكبر ملف قابل للبث تلقائياً)
     final stream = LibtorrentFlutter.instance.startStream(
       id,
-      maxCacheBytes: 500 * 1024 * 1024,
+      maxCacheBytes: 500 * 1024 * 1024, // 500 ميجا كاش
     );
 
     _localStreamUrl = stream.url;
