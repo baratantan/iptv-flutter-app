@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/addon_models.dart';
+import '../services/data_service.dart';
 import 'player_screen.dart';
 
 class AddonsScreen extends StatefulWidget {
@@ -17,16 +18,13 @@ class _AddonsScreenState extends State<AddonsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   
-  // بيانات
-  Map<String, List<AddonCatalogItem>> _catalogContents = {};
-  List<AddonCatalogItem> _allMovies = [];
-  List<AddonCatalogItem> _allSeries = [];
+  Map<String, List<Map<String, dynamic>>> _catalogContents = {};
+  List<Map<String, dynamic>> _allMovies = [];
+  List<Map<String, dynamic>> _allSeries = [];
   
-  // خرائط ربط
   Map<String, String> _itemToAddonUrl = {};
   Map<String, String> _itemToType = {};
 
-  // للتحكم في البانر التلقائي
   final PageController _pageController = PageController(viewportFraction: 0.9);
   int _currentBannerIndex = 0;
   Timer? _bannerTimer;
@@ -34,7 +32,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadAllAddonsData();
+    _loadData();
   }
 
   @override
@@ -44,7 +42,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
     super.dispose();
   }
 
-  void _startBannerAutoPlay(List<AddonCatalogItem> bannerItems) {
+  void _startBannerAutoPlay(List<Map<String, dynamic>> bannerItems) {
     _bannerTimer?.cancel();
     if (bannerItems.isEmpty) return;
 
@@ -64,7 +62,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
     });
   }
 
-  Future<void> _loadAllAddonsData() async {
+  Future<void> _loadData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final addonsJson = prefs.getString('addons_list');
@@ -89,53 +87,34 @@ class _AddonsScreenState extends State<AddonsScreen> {
         return;
       }
 
-      Map<String, List<AddonCatalogItem>> catalogContents = {};
-      List<AddonCatalogItem> allMovies = [];
-      List<AddonCatalogItem> allSeries = [];
+      Map<String, List<Map<String, dynamic>>> catalogContents = {};
+      List<Map<String, dynamic>> allMovies = [];
+      List<Map<String, dynamic>> allSeries = [];
       Map<String, String> itemToAddonUrl = {};
       Map<String, String> itemToType = {};
 
       for (var addon in activeAddons) {
-        try {
-          final manifestResponse = await http.get(Uri.parse('${addon.url}/manifest.json'));
-          if (manifestResponse.statusCode != 200) continue;
+        final cache = await DataService.loadAddonData(addon.url, addon.name);
+        if (cache == null) continue;
 
-          final manifestJson = json.decode(manifestResponse.body);
-          final manifest = AddonManifest.fromJson(manifestJson, addon.url);
+        for (var catalog in cache.catalogs) {
+          final catalogName = catalog['name'] as String;
+          final catalogType = catalog['type'] as String;
+          final items = catalog['items'] as List<Map<String, dynamic>>;
 
-          for (var catalog in manifest.catalogs) {
-            try {
-              final catalogUrl = '${addon.url}/catalog/${catalog.type}/${catalog.id}.json';
-              final catalogResponse = await http.get(Uri.parse(catalogUrl));
+          final key = '${cache.addonName} - $catalogName';
+          catalogContents[key] = items;
 
-              if (catalogResponse.statusCode == 200) {
-                final catalogJson = json.decode(catalogResponse.body);
-                final metas = catalogJson['metas'] as List? ?? [];
-                
-                List<AddonCatalogItem> items = metas
-                    .map((m) => AddonCatalogItem.fromJson(m))
-                    .toList();
-
-                final key = '${manifest.name} - ${catalog.name}';
-                catalogContents[key] = items;
-
-                for (var item in items) {
-                  itemToAddonUrl[item.id] = addon.url;
-                  itemToType[item.id] = catalog.type;
-                  
-                  if (catalog.type == 'movie') {
-                    allMovies.add(item);
-                  } else if (catalog.type == 'series') {
-                    allSeries.add(item);
-                  }
-                }
-              }
-            } catch (e) {
-              // تخطي
+          for (var item in items) {
+            itemToAddonUrl[item['id']] = addon.url;
+            itemToType[item['id']] = catalogType;
+            
+            if (catalogType == 'movie') {
+              allMovies.add(item);
+            } else if (catalogType == 'series') {
+              allSeries.add(item);
             }
           }
-        } catch (e) {
-          // تخطي
         }
       }
 
@@ -151,8 +130,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
         }
       });
 
-      // بدء الحركة التلقائية للبانر
-      List<AddonCatalogItem> bannerItems = [];
+      List<Map<String, dynamic>> bannerItems = [];
       catalogContents.forEach((key, list) => bannerItems.addAll(list));
       _startBannerAutoPlay(bannerItems.take(6).toList());
 
@@ -164,9 +142,10 @@ class _AddonsScreenState extends State<AddonsScreen> {
     }
   }
 
-  Future<void> _playItem(AddonCatalogItem item) async {
-    final addonUrl = _itemToAddonUrl[item.id];
-    final type = _itemToType[item.id] ?? 'movie';
+  Future<void> _playItem(Map<String, dynamic> item) async {
+    final id = item['id'] as String;
+    final addonUrl = _itemToAddonUrl[id];
+    final type = _itemToType[id] ?? 'movie';
 
     if (addonUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -192,8 +171,8 @@ class _AddonsScreenState extends State<AddonsScreen> {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchEpisodes(String addonUrl, AddonCatalogItem series) async {
-    final metaUrl = '$addonUrl/meta/series/${series.id}.json';
+  Future<List<Map<String, dynamic>>> _fetchEpisodes(String addonUrl, Map<String, dynamic> series) async {
+    final metaUrl = '$addonUrl/meta/series/${series['id']}.json';
     final response = await http.get(Uri.parse(metaUrl));
     
     if (response.statusCode != 200) {
@@ -211,7 +190,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
     }).toList();
   }
 
-  Widget _buildEpisodesSheet(String addonUrl, AddonCatalogItem series) {
+  Widget _buildEpisodesSheet(String addonUrl, Map<String, dynamic> series) {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _fetchEpisodes(addonUrl, series),
       builder: (context, snapshot) {
@@ -240,7 +219,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('حلقات ${series.name}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('حلقات ${series['name']}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               Flexible(
                 child: ListView(
@@ -296,8 +275,8 @@ class _AddonsScreenState extends State<AddonsScreen> {
     }).toList();
   }
 
-  Widget _buildStreamsSheet(String addonUrl, AddonCatalogItem item, String type, {String? videoId}) {
-    final idToUse = videoId ?? item.id;
+  Widget _buildStreamsSheet(String addonUrl, Map<String, dynamic> item, String type, {String? videoId}) {
+    final idToUse = videoId ?? item['id'];
     
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _fetchStreams(addonUrl, type, idToUse),
@@ -320,7 +299,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('روابط البث لـ ${item.name}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('روابط البث لـ ${item['name']}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               Flexible(
                 child: ListView.builder(
@@ -340,7 +319,10 @@ class _AddonsScreenState extends State<AddonsScreen> {
                         Navigator.pop(context);
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => PlayerScreen(streamUrl: url, channelName: item.name),
+                            builder: (_) => PlayerScreen(
+                              streamUrl: url,
+                              channelName: item['name'],
+                            ),
                           ),
                         );
                       },
@@ -365,10 +347,9 @@ class _AddonsScreenState extends State<AddonsScreen> {
       return Scaffold(body: Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red))));
     }
 
-    // تجميع كل الأفلام والمسلسلات للبانر
-    List<AddonCatalogItem> allItems = [];
-    _catalogContents.forEach((key, list) => allItems.addAll(list));
-    final bannerItems = allItems.take(6).toList();
+    List<Map<String, dynamic>> bannerItems = [];
+    _catalogContents.forEach((key, list) => bannerItems.addAll(list));
+    final featuredItems = bannerItems.take(6).toList();
 
     return DefaultTabController(
       length: 3,
@@ -390,11 +371,8 @@ class _AddonsScreenState extends State<AddonsScreen> {
         ),
         body: TabBarView(
           children: [
-            // 1. الرئيسية (بانر + شرائط)
-            _buildHomeTab(bannerItems),
-            // 2. الأفلام (شبكة)
+            _buildHomeTab(featuredItems),
             _buildMediaGrid(_allMovies, 'movie'),
-            // 3. المسلسلات (شبكة)
             _buildMediaGrid(_allSeries, 'series'),
           ],
         ),
@@ -402,10 +380,9 @@ class _AddonsScreenState extends State<AddonsScreen> {
     );
   }
 
-  Widget _buildHomeTab(List<AddonCatalogItem> bannerItems) {
+  Widget _buildHomeTab(List<Map<String, dynamic>> bannerItems) {
     return CustomScrollView(
       slivers: [
-        // البانر
         SliverToBoxAdapter(
           child: SizedBox(
             height: 320,
@@ -424,7 +401,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
                       image: DecorationImage(
-                        image: NetworkImage(item.poster ?? ''),
+                        image: NetworkImage(item['poster'] ?? ''),
                         fit: BoxFit.cover,
                         onError: (e, s) {},
                       ),
@@ -444,7 +421,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
                           mainAxisAlignment: MainAxisAlignment.end,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(item.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(item['name'], style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                             const SizedBox(height: 8),
                             ElevatedButton.icon(
                               onPressed: () => _playItem(item),
@@ -465,7 +442,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
             ),
           ),
         ),
-        // الشرائط
         ..._catalogContents.entries.map((entry) {
           return SliverToBoxAdapter(
             child: _buildHorizontalSection(entry.key, entry.value),
@@ -475,7 +451,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
     );
   }
 
-  Widget _buildHorizontalSection(String title, List<AddonCatalogItem> items) {
+  Widget _buildHorizontalSection(String title, List<Map<String, dynamic>> items) {
     if (items.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -504,13 +480,13 @@ class _AddonsScreenState extends State<AddonsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(
-                          child: (item.poster != null && item.poster!.isNotEmpty)
-                              ? Image.network(item.poster!, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.movie))
+                          child: (item['poster'] != null && item['poster'].isNotEmpty)
+                              ? Image.network(item['poster'], fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.movie))
                               : const Icon(Icons.movie),
                         ),
                         Padding(
                           padding: const EdgeInsets.all(4.0),
-                          child: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                          child: Text(item['name'], maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white)),
                         ),
                       ],
                     ),
@@ -524,7 +500,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
     );
   }
 
-  Widget _buildMediaGrid(List<AddonCatalogItem> items, String type) {
+  Widget _buildMediaGrid(List<Map<String, dynamic>> items, String type) {
     if (items.isEmpty) return const Center(child: Text('لا توجد عناصر', style: TextStyle(color: Colors.grey)));
 
     return SafeArea(
@@ -547,13 +523,13 @@ class _AddonsScreenState extends State<AddonsScreen> {
                 Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: (item.poster != null && item.poster!.isNotEmpty)
-                        ? Image.network(item.poster!, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)))
+                    child: (item['poster'] != null && item['poster'].isNotEmpty)
+                        ? Image.network(item['poster'], fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)))
                         : Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)),
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                Text(item['name'], maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
               ],
             ),
           );
