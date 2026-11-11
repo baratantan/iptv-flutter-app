@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 import 'screens/splash_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  
+  // تهيئة محرك التورنت (ضروري ليعمل البث عبر التورنت)
+  await LibtorrentFlutter.init();
+
   runApp(const IptvApp());
 }
 
@@ -14,7 +19,7 @@ class IptvApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'IPTV Player',
+      title: 'Player Pro',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
