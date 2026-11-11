@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/addon_models.dart';
-import 'player_screen.dart';
 
 class AddonsScreen extends StatefulWidget {
   const AddonsScreen({super.key});
@@ -16,25 +15,24 @@ class _AddonsScreenState extends State<AddonsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   
-  AddonManifest? _manifest;
-  Map<String, List<AddonCatalogItem>> _catalogContents = {};
+  // قائمة بكل الكاتالوجات المتاحة (من كل الإضافات)
+  List<Map<String, dynamic>> _allCatalogs = [];
   
-  // سنستخدم PageController للبانر (مثل Xtream)
-  final PageController _pageController = PageController(viewportFraction: 0.9);
-  int _currentPage = 0;
+  // محتوى كل كاتالوج (المفتاح: اسم الكاتالوج، القيمة: قائمة الأفلام)
+  Map<String, List<AddonCatalogItem>> _catalogContents = {};
 
   @override
   void initState() {
     super.initState();
-    _loadAddonData();
+    _loadAllAddonsData();
   }
 
-  Future<void> _loadAddonData() async {
+  Future<void> _loadAllAddonsData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final addonUrl = prefs.getString('addon_url');
+      final addonsJson = prefs.getString('addons_list');
 
-      if (addonUrl == null || addonUrl.isEmpty) {
+      if (addonsJson == null || addonsJson.isEmpty) {
         setState(() {
           _errorMessage = 'لم يتم إضافة أي إضافة. يرجى إضافتها من الإعدادات.';
           _isLoading = false;
@@ -42,38 +40,77 @@ class _AddonsScreenState extends State<AddonsScreen> {
         return;
       }
 
-      // 1. جلب manifest.json
-      final manifestResponse = await http.get(Uri.parse('$addonUrl/manifest.json'));
-      if (manifestResponse.statusCode != 200) {
-        throw Exception('فشل تحميل الإضافة');
+      final List<dynamic> decoded = json.decode(addonsJson);
+      final List<AddonConfig> allAddons = decoded.map((e) => AddonConfig.fromJson(e)).toList();
+      
+      // تصفية الإضافات النشطة فقط
+      final activeAddons = allAddons.where((a) => a.isEnabled).toList();
+
+      if (activeAddons.isEmpty) {
+        setState(() {
+          _errorMessage = 'لا توجد إضافات نشطة. يرجى تفعيل إضافة واحدة على الأقل.';
+          _isLoading = false;
+        });
+        return;
       }
 
-      final manifestJson = json.decode(manifestResponse.body);
-      final manifest = AddonManifest.fromJson(manifestJson, addonUrl);
+      // جلب البيانات من كل إضافة نشطة
+      List<Map<String, dynamic>> allCatalogs = [];
+      Map<String, List<AddonCatalogItem>> catalogContents = {};
 
-      // 2. جلب محتوى كل كاتالوج
-      Map<String, List<AddonCatalogItem>> contents = {};
-      for (var catalog in manifest.catalogs) {
-        // طلب الكاتالوج: /catalog/{type}/{id}.json
-        final catalogUrl = '$addonUrl/catalog/${catalog.type}/${catalog.id}.json';
-        final catalogResponse = await http.get(Uri.parse(catalogUrl));
-        
-        if (catalogResponse.statusCode == 200) {
-          final catalogJson = json.decode(catalogResponse.body);
-          final metas = catalogJson['metas'] as List? ?? [];
-          
-          List<AddonCatalogItem> items = metas
-              .map((m) => AddonCatalogItem.fromJson(m))
-              .toList();
-          
-          contents[catalog.name] = items;
+      for (var addon in activeAddons) {
+        try {
+          // 1. جلب manifest.json
+          final manifestResponse = await http.get(Uri.parse('${addon.url}/manifest.json'));
+          if (manifestResponse.statusCode != 200) {
+            continue; // تخطي الإضافة إذا فشلت
+          }
+
+          final manifestJson = json.decode(manifestResponse.body);
+          final manifest = AddonManifest.fromJson(manifestJson, addon.url);
+
+          // 2. جلب محتوى كل كاتالوج
+          for (var catalog in manifest.catalogs) {
+            try {
+              final catalogUrl = '${addon.url}/catalog/${catalog.type}/${catalog.id}.json';
+              final catalogResponse = await http.get(Uri.parse(catalogUrl));
+
+              if (catalogResponse.statusCode == 200) {
+                final catalogJson = json.decode(catalogResponse.body);
+                final metas = catalogJson['metas'] as List? ?? [];
+                
+                List<AddonCatalogItem> items = metas
+                    .map((m) => AddonCatalogItem.fromJson(m))
+                    .toList();
+
+                // إضافة الكاتالوج إلى القائمة
+                allCatalogs.add({
+                  'name': catalog.name,
+                  'addonName': manifest.name,
+                  'type': catalog.type,
+                  'id': catalog.id,
+                });
+
+                // تخزين محتوى الكاتالوج
+                final key = '${manifest.name} - ${catalog.name}';
+                catalogContents[key] = items;
+              }
+            } catch (e) {
+              // تخطي الكاتالوج إذا فشل
+            }
+          }
+        } catch (e) {
+          // تخطي الإضافة إذا فشلت
         }
       }
 
       setState(() {
-        _manifest = manifest;
-        _catalogContents = contents;
+        _allCatalogs = allCatalogs;
+        _catalogContents = catalogContents;
         _isLoading = false;
+        if (allCatalogs.isEmpty) {
+          _errorMessage = 'لم يتم العثور على محتوى في الإضافات النشطة.';
+        }
       });
 
     } catch (e) {
@@ -85,9 +122,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
   }
 
   Future<void> _playItem(AddonCatalogItem item) async {
-    // هنا سنحتاج لجلب روابط البث من الإضافة (stream)
-    // لكن للتبسيط، سنفترض أن العنصر يحتوي على رابط أو نطلب من الإضافة
-    // سنترك هذه الخطوة لاحقاً، الآن سنعرض رسالة فقط
+    // مؤقتاً: نعرض رسالة. سنقوم بتشغيل الفيديو في المرحلة التالية
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('سيتم تشغيل: ${item.name} (قريباً)')),
     );
@@ -119,9 +154,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
             child: SizedBox(
               height: 320,
               child: PageView.builder(
-                controller: _pageController,
                 itemCount: bannerItems.length,
-                onPageChanged: (index) => setState(() => _currentPage = index),
                 itemBuilder: (context, index) {
                   final item = bannerItems[index];
                   return GestureDetector(
@@ -178,7 +211,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
             ),
           ),
 
-          // 2. شرائط أفقية لكل كاتالوج
+          // 2. الشرائط الأفقية لكل كاتالوج
           ..._catalogContents.entries.map((entry) {
             return SliverToBoxAdapter(
               child: _buildHorizontalSection(entry.key, entry.value),
