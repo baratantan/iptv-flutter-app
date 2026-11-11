@@ -1,9 +1,47 @@
+// نموذج الإضافة (Addon)
+class AddonConfig {
+  final String id;
+  final String name;
+  final String url;
+  final bool isEnabled;
+
+  AddonConfig({
+    required this.id,
+    required this.name,
+    required this.url,
+    this.isEnabled = true,
+  });
+
+  // تحويل الكائن إلى Map (لتخزينه في SharedPreferences)
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'url': url,
+      'isEnabled': isEnabled,
+    };
+  }
+
+  // إنشاء الكائن من Map (عند قراءته من SharedPreferences)
+  factory AddonConfig.fromJson(Map<String, dynamic> json) {
+    return AddonConfig(
+      id: json['id'] ?? '',
+      name: json['name'] ?? 'إضافة غير معروفة',
+      url: json['url'] ?? '',
+      isEnabled: json['isEnabled'] ?? true,
+    );
+  }
+}
+
+// النماذج التالية (AddonManifest، AddonCatalog، AddonCatalogItem) التي كنا نستخدمها سابقاً
+// سنبقيها لأنها ضرورية لقراءة بيانات الإضافة.
+
 class AddonManifest {
   final String id;
   final String name;
   final String? logo;
   final List<AddonCatalog> catalogs;
-  final String addonUrl; // الرابط الأساسي للإضافة
+  final String addonUrl;
 
   AddonManifest({
     required this.id,
@@ -30,7 +68,7 @@ class AddonManifest {
 }
 
 class AddonCatalog {
-  final String type; // movie, series
+  final String type;
   final String id;
   final String name;
 
@@ -45,7 +83,6 @@ class AddonCatalog {
   }
 }
 
-// عنصر داخل الكاتالوج (فيلم/مسلسل)
 class AddonCatalogItem {
   final String id;
   final String name;
