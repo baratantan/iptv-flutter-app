@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/addon_models.dart';
 import 'setup_screen.dart';
 import 'home_screen.dart';
 
@@ -12,39 +14,45 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   String _sourceType = 'غير محدد';
+  List<AddonConfig> _addons = [];
 
   @override
   void initState() {
     super.initState();
-    _loadCurrentSource();
+    _loadSettings();
   }
 
-  Future<void> _loadCurrentSource() async {
+  Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final type = prefs.getString('source_type') ?? '';
+    final addonsJson = prefs.getString('addons_list');
+
+    List<AddonConfig> loadedAddons = [];
+    if (addonsJson != null && addonsJson.isNotEmpty) {
+      final List<dynamic> decoded = json.decode(addonsJson);
+      loadedAddons = decoded.map((e) => AddonConfig.fromJson(e)).toList();
+    }
+
     if (mounted) {
       setState(() {
-        if (type == 'xtream') {
-          _sourceType = 'Xtream Codes';
-        } else if (type == 'm3u') {
-          _sourceType = 'M3U Playlist';
-        } else {
-          _sourceType = 'غير محدد';
-        }
+        _sourceType = type == 'xtream' ? 'Xtream Codes' : (type == 'm3u' ? 'M3U Playlist' : 'غير محدد');
+        _addons = loadedAddons;
       });
     }
   }
 
+  Future<void> _saveAddons(List<AddonConfig> addons) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String encoded = json.encode(addons.map((e) => e.toJson()).toList());
+    await prefs.setString('addons_list', encoded);
+    setState(() {
+      _addons = addons;
+    });
+  }
+
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('source_type');
-    await prefs.remove('xtream_server');
-    await prefs.remove('xtream_username');
-    await prefs.remove('xtream_password');
-    await prefs.remove('m3u_content');
-    await prefs.remove('m3u_url');
-    await prefs.remove('addon_url'); // مسح رابط الإضافة أيضاً
-
+    await prefs.clear();
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const SetupScreen()),
@@ -53,48 +61,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _editAddonUrl() async {
-    final prefs = await SharedPreferences.getInstance();
-    final currentUrl = prefs.getString('addon_url') ?? '';
-    final controller = TextEditingController(text: currentUrl);
+  Future<void> _addNewAddon() async {
+    final nameController = TextEditingController();
+    final urlController = TextEditingController();
 
-    final result = await showDialog<String>(
+    final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1F2937),
-        title: const Text('رابط الإضافة', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'https://example.com/manifest.json',
-            hintStyle: TextStyle(color: Colors.grey),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFF5238))),
-          ),
-          textDirection: TextDirection.ltr,
+        title: const Text('إضافة جديدة', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'اسم الإضافة (مثال: Cinemeta)',
+                labelStyle: TextStyle(color: Colors.grey),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFF5238))),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: urlController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'الرابط (Addon URL)',
+                labelStyle: TextStyle(color: Colors.grey),
+                hintText: 'https://v3-cinemeta.strem.io',
+                hintStyle: TextStyle(color: Colors.grey, fontSize: 12),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFF5238))),
+              ),
+              textDirection: TextDirection.ltr,
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('حفظ', style: TextStyle(color: Color(0xFFFF5238))),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('إضافة', style: TextStyle(color: Color(0xFFFF5238))),
           ),
         ],
       ),
     );
 
-    if (result != null && result.isNotEmpty) {
-      await prefs.setString('addon_url', result);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حفظ رابط الإضافة بنجاح')),
-        );
+    if (result == true && urlController.text.trim().isNotEmpty) {
+      String url = urlController.text.trim();
+      // إزالة manifest.json إذا كتبه المستخدم
+      if (url.endsWith('/manifest.json')) {
+        url = url.substring(0, url.length - '/manifest.json'.length);
       }
+      // إزالة الشرطة المائلة في النهاية
+      if (url.endsWith('/')) {
+        url = url.substring(0, url.length - 1);
+      }
+
+      final newAddon = AddonConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: nameController.text.trim().isEmpty ? 'إضافة جديدة' : nameController.text.trim(),
+        url: url,
+        isEnabled: true,
+      );
+
+      await _saveAddons([..._addons, newAddon]);
     }
+  }
+
+  Future<void> _removeAddon(String id) async {
+    final updatedAddons = _addons.where((a) => a.id != id).toList();
+    await _saveAddons(updatedAddons);
+  }
+
+  Future<void> _toggleAddon(String id, bool isEnabled) async {
+    final updatedAddons = _addons.map((a) {
+      if (a.id == id) {
+        return AddonConfig(id: a.id, name: a.name, url: a.url, isEnabled: isEnabled);
+      }
+      return a;
+    }).toList();
+    await _saveAddons(updatedAddons);
   }
 
   @override
@@ -104,21 +156,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text('الإعدادات'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add, color: Color(0xFFFF5238)),
+            onPressed: _addNewAddon,
+            tooltip: 'إضافة إضافة جديدة',
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // قسم الاشتراك
-          const Text(
-            'الاشتراك',
-            style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold),
-          ),
+          const Text('الاشتراك', style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F2937),
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(12)),
             child: Column(
               children: [
                 ListTile(
@@ -132,9 +185,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: const Text('تغيير بيانات الاشتراك', style: TextStyle(color: Colors.white)),
                   trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SetupScreen()),
-                    );
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SetupScreen()));
                   },
                 ),
                 const Divider(height: 1, color: Colors.grey),
@@ -149,20 +200,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         title: const Text('تأكيد', style: TextStyle(color: Colors.white)),
                         content: const Text('هل أنت متأكد من مسح جميع البيانات؟', style: TextStyle(color: Colors.grey)),
                         actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('مسح', style: TextStyle(color: Colors.red)),
-                          ),
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+                          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('مسح', style: TextStyle(color: Colors.red))),
                         ],
                       ),
                     );
-                    if (confirm == true) {
-                      await _logout();
-                    }
+                    if (confirm == true) await _logout();
                   },
                 ),
               ],
@@ -171,43 +214,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
-          // قسم الإضافات (جديد)
-          const Text(
-            'الإضافات',
-            style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold),
+          // قسم الإضافات
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('الإضافات', style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
+              TextButton.icon(
+                onPressed: _addNewAddon,
+                icon: const Icon(Icons.add, size: 16, color: Color(0xFFFF5238)),
+                label: const Text('إضافة', style: TextStyle(color: Color(0xFFFF5238))),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F2937),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.extension, color: Color(0xFFFF5238)),
-                  title: const Text('إدارة الإضافة', style: TextStyle(color: Colors.white)),
-                  subtitle: const Text('أضف رابط الإضافة (Addon URL)', style: TextStyle(color: Colors.grey)),
-                  trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
-                  onTap: _editAddonUrl,
-                ),
-              ],
-            ),
-          ),
+
+          if (_addons.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(12)),
+              child: const Center(
+                child: Text('لم يتم إضافة أي إضافة. اضغط على زر + لإضافة إضافة.', style: TextStyle(color: Colors.grey)),
+              ),
+            )
+          else
+            ..._addons.map((addon) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(12)),
+                  child: ListTile(
+                    leading: Switch(
+                      value: addon.isEnabled,
+                      onChanged: (value) => _toggleAddon(addon.id, value),
+                      activeColor: const Color(0xFFFF5238),
+                    ),
+                    title: Text(addon.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    subtitle: Text(addon.url, style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _removeAddon(addon.id),
+                    ),
+                  ),
+                )),
 
           const SizedBox(height: 24),
 
           // قسم حول التطبيق
-          const Text(
-            'حول التطبيق',
-            style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold),
-          ),
+          const Text('حول التطبيق', style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F2937),
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(12)),
             child: Column(
               children: [
                 ListTile(
