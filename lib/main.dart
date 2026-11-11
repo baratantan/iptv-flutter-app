@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   
-  // تهيئة محرك التورنت (ضروري ليعمل البث عبر التورنت)
-  await LibtorrentFlutter.init();
+  // تم إزالة تهيئة التورنت مؤقتاً لحل مشكلة الشاشة السوداء
+  // await LibtorrentFlutter.init();
 
   runApp(const IptvApp());
 }
