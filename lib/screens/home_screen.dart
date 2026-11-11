@@ -8,7 +8,7 @@ import 'movie_details_screen.dart';
 import 'category_screen.dart';
 import 'series_details_screen.dart';
 import 'settings_screen.dart';
-import 'addons_screen.dart'; // استدعاء شاشة الإضافات
+import 'addons_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -39,6 +39,9 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentPage = 0;
   Timer? _timer;
   int _currentTabIndex = 0;
+
+  // متغير لإجبار صفحة الإضافات على إعادة التحميل
+  int _addonsKey = 0;
 
   @override
   void initState() {
@@ -205,14 +208,14 @@ class _HomeScreenState extends State<HomeScreen> {
       return Scaffold(body: Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.red))));
     }
 
-    // إضافة صفحة الإضافات إلى قائمة الصفحات
+    // إضافة صفحة الإضافات مع Key متغير لإعادة التحميل
     final List<Widget> pages = [
       _buildHomeTab(),
       _buildChannelsTab(),
       _buildMediaGrid(_allMovies, 'movie'), 
       _buildMediaGrid(_allSeries, 'series'), 
-      const AddonsScreen(), // تبويب الإضافات
-      const SizedBox(), // صفحة فارغة للزر السادس (الإعدادات)
+      AddonsScreen(key: ValueKey(_addonsKey)), // Key متغير
+      const SizedBox(),
     ];
 
     return Scaffold(
@@ -226,16 +229,25 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedItemColor: const Color(0xFFFF5238),
         unselectedItemColor: Colors.grey,
         currentIndex: _currentTabIndex,
-        type: BottomNavigationBarType.fixed, // مهم: لأن لدينا 6 أزرار
+        type: BottomNavigationBarType.fixed,
         onTap: (index) {
           if (index == 5) {
             // فتح صفحة الإعدادات
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            );
+            ).then((_) {
+              // عند العودة من الإعدادات، قم بتحديث صفحة الإضافات
+              setState(() {
+                _addonsKey++;
+              });
+            });
           } else {
             setState(() {
               _currentTabIndex = index;
+              // إذا كان التبويب المختار هو الإضافات، قم بتحديثه
+              if (index == 4) {
+                _addonsKey++;
+              }
             });
           }
         },
