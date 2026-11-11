@@ -20,7 +20,7 @@ dependencies:
   smooth_page_indicator: ^1.1.0
   local_pip: ^1.1.0
   airo_m3u_parser: ^1.0.0
-  libtorrent_flutter: 1.7.6
+  libtorrent_flutter: ^1.9.1
 
 dev_dependencies:
   flutter_test:
