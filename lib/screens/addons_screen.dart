@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/addon_models.dart';
+import 'player_screen.dart';
 
 class AddonsScreen extends StatefulWidget {
   const AddonsScreen({super.key});
@@ -15,11 +16,11 @@ class _AddonsScreenState extends State<AddonsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   
-  // قائمة بكل الكاتالوجات المتاحة (من كل الإضافات)
-  List<Map<String, dynamic>> _allCatalogs = [];
-  
-  // محتوى كل كاتالوج (المفتاح: اسم الكاتالوج، القيمة: قائمة الأفلام)
   Map<String, List<AddonCatalogItem>> _catalogContents = {};
+  
+  // خرائط لربط كل عنصر بمعلومات الإضافة والنوع
+  Map<String, String> _itemToAddonUrl = {};
+  Map<String, String> _itemToType = {}; // 'movie' أو 'series'
 
   @override
   void initState() {
@@ -42,34 +43,28 @@ class _AddonsScreenState extends State<AddonsScreen> {
 
       final List<dynamic> decoded = json.decode(addonsJson);
       final List<AddonConfig> allAddons = decoded.map((e) => AddonConfig.fromJson(e)).toList();
-      
-      // تصفية الإضافات النشطة فقط
       final activeAddons = allAddons.where((a) => a.isEnabled).toList();
 
       if (activeAddons.isEmpty) {
         setState(() {
-          _errorMessage = 'لا توجد إضافات نشطة. يرجى تفعيل إضافة واحدة على الأقل.';
+          _errorMessage = 'لا توجد إضافات نشطة.';
           _isLoading = false;
         });
         return;
       }
 
-      // جلب البيانات من كل إضافة نشطة
-      List<Map<String, dynamic>> allCatalogs = [];
       Map<String, List<AddonCatalogItem>> catalogContents = {};
+      Map<String, String> itemToAddonUrl = {};
+      Map<String, String> itemToType = {};
 
       for (var addon in activeAddons) {
         try {
-          // 1. جلب manifest.json
           final manifestResponse = await http.get(Uri.parse('${addon.url}/manifest.json'));
-          if (manifestResponse.statusCode != 200) {
-            continue; // تخطي الإضافة إذا فشلت
-          }
+          if (manifestResponse.statusCode != 200) continue;
 
           final manifestJson = json.decode(manifestResponse.body);
           final manifest = AddonManifest.fromJson(manifestJson, addon.url);
 
-          // 2. جلب محتوى كل كاتالوج
           for (var catalog in manifest.catalogs) {
             try {
               final catalogUrl = '${addon.url}/catalog/${catalog.type}/${catalog.id}.json';
@@ -83,32 +78,30 @@ class _AddonsScreenState extends State<AddonsScreen> {
                     .map((m) => AddonCatalogItem.fromJson(m))
                     .toList();
 
-                // إضافة الكاتالوج إلى القائمة
-                allCatalogs.add({
-                  'name': catalog.name,
-                  'addonName': manifest.name,
-                  'type': catalog.type,
-                  'id': catalog.id,
-                });
-
-                // تخزين محتوى الكاتالوج
                 final key = '${manifest.name} - ${catalog.name}';
                 catalogContents[key] = items;
+
+                // ربط كل عنصر بمعلومات الإضافة والنوع
+                for (var item in items) {
+                  itemToAddonUrl[item.id] = addon.url;
+                  itemToType[item.id] = catalog.type; // 'movie' أو 'series'
+                }
               }
             } catch (e) {
-              // تخطي الكاتالوج إذا فشل
+              // تخطي
             }
           }
         } catch (e) {
-          // تخطي الإضافة إذا فشلت
+          // تخطي
         }
       }
 
       setState(() {
-        _allCatalogs = allCatalogs;
         _catalogContents = catalogContents;
+        _itemToAddonUrl = itemToAddonUrl;
+        _itemToType = itemToType;
         _isLoading = false;
-        if (allCatalogs.isEmpty) {
+        if (catalogContents.isEmpty) {
           _errorMessage = 'لم يتم العثور على محتوى في الإضافات النشطة.';
         }
       });
@@ -122,9 +115,226 @@ class _AddonsScreenState extends State<AddonsScreen> {
   }
 
   Future<void> _playItem(AddonCatalogItem item) async {
-    // مؤقتاً: نعرض رسالة. سنقوم بتشغيل الفيديو في المرحلة التالية
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('سيتم تشغيل: ${item.name} (قريباً)')),
+    final addonUrl = _itemToAddonUrl[item.id];
+    final type = _itemToType[item.id] ?? 'movie';
+
+    if (addonUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لم يتم العثور على رابط الإضافة')),
+      );
+      return;
+    }
+
+    if (type == 'movie') {
+      // فيلم: فتح روابط البث مباشرة
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: const Color(0xFF1F2937),
+        isScrollControlled: true,
+        builder: (context) => _buildStreamsSheet(addonUrl, item, 'movie'),
+      );
+    } else {
+      // مسلسل: فتح قائمة الحلقات
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: const Color(0xFF1F2937),
+        isScrollControlled: true,
+        builder: (context) => _buildEpisodesSheet(addonUrl, item),
+      );
+    }
+  }
+
+  // جلب الحلقات لمسلسل
+  Future<List<Map<String, dynamic>>> _fetchEpisodes(String addonUrl, AddonCatalogItem series) async {
+    final metaUrl = '$addonUrl/meta/series/${series.id}.json';
+    final response = await http.get(Uri.parse(metaUrl));
+    
+    if (response.statusCode != 200) {
+      throw Exception('فشل جلب حلقات المسلسل (HTTP ${response.statusCode})');
+    }
+
+    final jsonData = json.decode(response.body);
+    final videos = jsonData['meta']?['videos'] as List? ?? [];
+    
+    return videos.map<Map<String, dynamic>>((v) => {
+      'id': v['id'] ?? '',
+      'title': v['title'] ?? v['name'] ?? 'حلقة',
+      'season': v['season'] ?? 0,
+      'episode': v['episode'] ?? 0,
+      'thumbnail': v['thumbnail'],
+    }).toList();
+  }
+
+  Widget _buildEpisodesSheet(String addonUrl, AddonCatalogItem series) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _fetchEpisodes(addonUrl, series),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 200,
+            child: Center(child: CircularProgressIndicator(color: Color(0xFFFF5238))),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return SizedBox(
+            height: 200,
+            child: Center(child: Text('فشل: ${snapshot.error}', style: const TextStyle(color: Colors.red))),
+          );
+        }
+
+        final episodes = snapshot.data ?? [];
+        if (episodes.isEmpty) {
+          return const SizedBox(
+            height: 200,
+            child: Center(child: Text('لا توجد حلقات متاحة', style: TextStyle(color: Colors.grey))),
+          );
+        }
+
+        // تجميع الحلقات حسب الموسم
+        Map<int, List<Map<String, dynamic>>> seasons = {};
+        for (var ep in episodes) {
+          final s = ep['season'] as int? ?? 0;
+          if (!seasons.containsKey(s)) seasons[s] = [];
+          seasons[s]!.add(ep);
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('حلقات ${series.name}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: seasons.entries.map((entry) {
+                    final seasonNum = entry.key;
+                    final seasonEpisodes = entry.value;
+                    return ExpansionTile(
+                      title: Text('الموسم $seasonNum', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      children: seasonEpisodes.map((ep) {
+                        final epTitle = ep['title'] ?? 'حلقة ${ep['episode']}';
+                        final videoId = ep['id'] ?? '';
+                        
+                        return ListTile(
+                          leading: const Icon(Icons.play_circle_outline, color: Color(0xFFFF5238)),
+                          title: Text(epTitle, style: const TextStyle(color: Colors.white70)),
+                          onTap: () {
+                            Navigator.pop(context); // إغلاق نافذة الحلقات
+                            // فتح روابط البث للحلقة المحددة
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: const Color(0xFF1F2937),
+                              isScrollControlled: true,
+                              builder: (context) => _buildStreamsSheet(addonUrl, series, 'series', videoId: videoId),
+                            );
+                          },
+                        );
+                      }).toList(),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // جلب روابط البث (للفيلم أو الحلقة)
+  Future<List<Map<String, dynamic>>> _fetchStreams(String addonUrl, String type, String videoId) async {
+    final streamUrl = '$addonUrl/stream/$type/$videoId.json';
+    final response = await http.get(Uri.parse(streamUrl));
+    
+    if (response.statusCode != 200) {
+      throw Exception('فشل جلب الروابط (HTTP ${response.statusCode})');
+    }
+
+    final jsonData = json.decode(response.body);
+    final streams = jsonData['streams'] as List? ?? [];
+    
+    return streams.map<Map<String, dynamic>>((s) => {
+      'title': s['title'] ?? s['name'] ?? 'رابط',
+      'url': s['url'] ?? '',
+    }).toList();
+  }
+
+  Widget _buildStreamsSheet(String addonUrl, AddonCatalogItem item, String type, {String? videoId}) {
+    final idToUse = videoId ?? item.id; // للفيلم: id، للمسلسل: videoId
+    
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _fetchStreams(addonUrl, type, idToUse),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 200,
+            child: Center(child: CircularProgressIndicator(color: Color(0xFFFF5238))),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return SizedBox(
+            height: 200,
+            child: Center(child: Text('فشل: ${snapshot.error}', style: const TextStyle(color: Colors.red))),
+          );
+        }
+
+        final streams = snapshot.data ?? [];
+        if (streams.isEmpty) {
+          return const SizedBox(
+            height: 200,
+            child: Center(child: Text('لا توجد روابط متاحة', style: TextStyle(color: Colors.grey))),
+          );
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('روابط البث لـ ${item.name}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: streams.length,
+                  itemBuilder: (context, index) {
+                    final stream = streams[index];
+                    final title = stream['title'] ?? 'رابط ${index + 1}';
+                    final url = stream['url'] ?? '';
+                    final isTorrent = url.startsWith('magnet:');
+
+                    return ListTile(
+                      leading: Icon(
+                        isTorrent ? Icons.cloud_download : Icons.play_circle,
+                        color: const Color(0xFFFF5238),
+                      ),
+                      title: Text(title, style: const TextStyle(color: Colors.white)),
+                      subtitle: Text(isTorrent ? 'تورنت (P2P)' : 'رابط مباشر', style: const TextStyle(color: Colors.grey)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => PlayerScreen(
+                              streamUrl: url,
+                              channelName: item.name,
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -140,7 +350,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
       );
     }
 
-    // تجميع كل الأفلام من كل الكاتالوجات للبانر
     List<AddonCatalogItem> allItems = [];
     _catalogContents.forEach((key, list) => allItems.addAll(list));
     final bannerItems = allItems.take(6).toList();
@@ -149,7 +358,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
       backgroundColor: const Color(0xFF0B0E14),
       body: CustomScrollView(
         slivers: [
-          // 1. البانر المتحرك
           SliverToBoxAdapter(
             child: SizedBox(
               height: 320,
@@ -210,8 +418,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
               ),
             ),
           ),
-
-          // 2. الشرائط الأفقية لكل كاتالوج
           ..._catalogContents.entries.map((entry) {
             return SliverToBoxAdapter(
               child: _buildHorizontalSection(entry.key, entry.value),
