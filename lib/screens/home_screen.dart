@@ -22,7 +22,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
   
-  // البيانات (من DataService)
   List<XtLiveChannel> _allLiveChannels = []; 
   List<XtVodItem> _allMovies = [];
   List<XtSeriesItem> _allSeries = [];
@@ -42,6 +41,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _timer;
   int _currentTabIndex = 0;
   int _addonsKey = 0;
+
+  // للبحث
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  List<dynamic> _searchResults = [];
 
   @override
   void initState() {
@@ -71,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _timer?.cancel();
     _pageController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -80,7 +85,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final sourceType = prefs.getString('source_type') ?? 'xtream';
 
       if (sourceType == 'm3u') {
-        // بيانات M3U (لا تخضع للتخزين المؤقت حالياً)
         final m3uContent = prefs.getString('m3u_content') ?? '';
         if (m3uContent.isEmpty) throw Exception('لا يوجد محتوى M3U');
 
@@ -109,14 +113,12 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      // بيانات Xtream
       _server = prefs.getString('xtream_server') ?? '';
       _username = prefs.getString('xtream_username') ?? '';
       _password = prefs.getString('xtream_password') ?? '';
 
       if (_server.isEmpty) throw Exception('لم يتم العثور على بيانات الاتصال');
 
-      // استخدام DataService (مع التخزين المؤقت)
       await DataService.loadXtreamData(
         server: _server,
         username: _username,
@@ -124,12 +126,10 @@ class _HomeScreenState extends State<HomeScreen> {
         forceRefresh: forceRefresh,
       );
 
-      // قراءة البيانات من DataService
       final allLive = DataService.liveChannels ?? [];
       final allMovies = DataService.movies ?? [];
       final allSeries = DataService.series ?? [];
       final vodCategories = DataService.vodCategories ?? [];
-      final seriesCategories = DataService.seriesCategories ?? [];
 
       setState(() {
         _allLiveChannels = allLive;
@@ -199,6 +199,40 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _performSearch(String query) {
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+      });
+      return;
+    }
+    final lowerQuery = query.toLowerCase();
+    final List<dynamic> results = [];
+    
+    // بحث في الأفلام
+    for (var item in _allMovies) {
+      if ((item.name ?? '').toLowerCase().contains(lowerQuery)) {
+        results.add({'type': 'movie', 'item': item});
+      }
+    }
+    // بحث في المسلسلات
+    for (var item in _allSeries) {
+      if ((item.name ?? '').toLowerCase().contains(lowerQuery)) {
+        results.add({'type': 'series', 'item': item});
+      }
+    }
+    // بحث في القنوات
+    for (var item in _allLiveChannels) {
+      if ((item.name ?? '').toLowerCase().contains(lowerQuery)) {
+        results.add({'type': 'channel', 'item': item});
+      }
+    }
+    
+    setState(() {
+      _searchResults = results;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -264,26 +298,31 @@ class _HomeScreenState extends State<HomeScreen> {
     return Stack(
       children: [
         ListView(
-          padding: const EdgeInsets.only(top: 40),
+          padding: const EdgeInsets.only(top: 20),
           children: [
-            // زر التحديث (اختياري، لإجبار جلب بيانات جديدة)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('المكتبة', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, color: Color(0xFFFF5238)),
-                    onPressed: () async {
-                      setState(() => _isLoading = true);
-                      await _loadData(forceRefresh: true);
-                    },
+            // شريط البحث (يظهر عند الضغط على أيقونة البحث)
+            if (_isSearching)
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'ابحث في الأفلام والمسلسلات والقنوات...',
+                    hintStyle: const TextStyle(color: Colors.grey),
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
+                    filled: true,
+                    fillColor: const Color(0xFF1F2937),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
-                ],
+                  onChanged: _performSearch,
+                ),
               ),
-            ),
             
+            // البانر
             if (_moviesForBanner.isNotEmpty)
               SizedBox(
                 height: 320,
@@ -353,6 +392,7 @@ class _HomeScreenState extends State<HomeScreen> {
             
             const SizedBox(height: 16),
             
+            // أزرار التصنيفات
             SizedBox(
               height: 40,
               child: ListView.builder(
@@ -376,21 +416,31 @@ class _HomeScreenState extends State<HomeScreen> {
             
             const SizedBox(height: 16),
             
-            _buildHorizontalSection('أحدث الأفلام', _latestMovies, 'movie'),
-            _buildHorizontalSection('أحدث المسلسلات', _latestSeries, 'series'),
-            _buildHorizontalSection('أحدث القنوات', _latestChannels, 'channel'),
+            // البحث (النتائج) أو الشرائط
+            if (_isSearching && _searchController.text.isNotEmpty)
+              _buildSearchResults()
+            else ...[
+              _buildHorizontalSection('أحدث الأفلام', _latestMovies, 'movie'),
+              _buildHorizontalSection('أحدث المسلسلات', _latestSeries, 'series'),
+              _buildHorizontalSection('أحدث القنوات', _latestChannels, 'channel'),
+            ],
             
             const SizedBox(height: 20),
           ],
         ),
+        // زر البحث (العائم)
         Positioned(
-          top: 50,
+          top: 10,
           right: 16,
           child: GestureDetector(
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('البحث قادم قريباً')),
-              );
+              setState(() {
+                _isSearching = !_isSearching;
+                if (!_isSearching) {
+                  _searchController.clear();
+                  _searchResults = [];
+                }
+              });
             },
             child: Container(
               padding: const EdgeInsets.all(10),
@@ -399,11 +449,81 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white.withOpacity(0.2)),
               ),
-              child: const Icon(Icons.search, color: Colors.white, size: 24),
+              child: Icon(
+                _isSearching ? Icons.close : Icons.search,
+                color: Colors.white,
+                size: 24,
+              ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSearchResults() {
+    if (_searchResults.isEmpty) {
+      return const Center(child: Text('لا توجد نتائج', style: TextStyle(color: Colors.grey)));
+    }
+    
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(8),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 0.65,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        final type = result['type'];
+        final item = result['item'];
+        
+        String poster = '';
+        String name = '';
+        if (type == 'movie') {
+          poster = item.posterUrl ?? '';
+          name = item.name ?? '';
+        } else if (type == 'series') {
+          poster = item.posterUrl ?? '';
+          name = item.name ?? '';
+        } else if (type == 'channel') {
+          poster = item.logoUrl ?? '';
+          name = item.name ?? '';
+        }
+        
+        return GestureDetector(
+          onTap: () {
+            if (type == 'movie') {
+              final url = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
+              _openMovieDetails(name, url, poster);
+            } else if (type == 'series') {
+              _openSeriesDetails(item);
+            } else if (type == 'channel') {
+              final url = '$_server/live/$_username/$_password/${item.streamId}.m3u8';
+              _playStream(url, name);
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: poster.isNotEmpty
+                      ? Image.network(poster, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.movie))
+                      : const Icon(Icons.movie),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white)),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -414,7 +534,40 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => _SeeAllScreen(
+                        title: title,
+                        items: items,
+                        type: type,
+                        server: _server,
+                        username: _username,
+                        password: _password,
+                        onItemTap: (item) {
+                          if (type == 'movie') {
+                            final url = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
+                            _openMovieDetails(item.name ?? 'فيلم', url, item.posterUrl);
+                          } else if (type == 'channel') {
+                            final url = '$_server/live/$_username/$_password/${item.streamId}.m3u8';
+                            _playStream(url, item.name ?? 'قناة');
+                          } else {
+                            _openSeriesDetails(item);
+                          }
+                        },
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('عرض الكل', style: TextStyle(color: Color(0xFFFF5238))),
+              ),
+            ],
+          ),
         ),
         SizedBox(
           height: 180,
@@ -426,22 +579,21 @@ class _HomeScreenState extends State<HomeScreen> {
               final item = items[index];
               final name = item.name ?? 'بدون اسم';
               String poster = '';
-              String streamUrl = '';
               if (type == 'movie') {
                 poster = item.posterUrl ?? '';
-                streamUrl = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
               } else if (type == 'series') {
                 poster = item.posterUrl ?? '';
               } else if (type == 'channel') {
                 poster = item.logoUrl ?? '';
-                streamUrl = '$_server/live/$_username/$_password/${item.streamId}.m3u8';
               }
               return GestureDetector(
                 onTap: () {
                   if (type == 'movie') {
-                    _openMovieDetails(name, streamUrl, poster);
+                    final url = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
+                    _openMovieDetails(name, url, poster);
                   } else if (type == 'channel') {
-                    _playStream(streamUrl, name);
+                    final url = '$_server/live/$_username/$_password/${item.streamId}.m3u8';
+                    _playStream(url, name);
                   } else {
                     _openSeriesDetails(item);
                   }
@@ -517,7 +669,7 @@ class _HomeScreenState extends State<HomeScreen> {
         itemBuilder: (context, index) {
           final item = items[index];
           final name = item.name ?? 'بدون اسم';
-          final poster = item.posterUrl ?? '';
+          final poster = type == 'movie' ? (item.posterUrl ?? '') : (item.posterUrl ?? '');
 
           return GestureDetector(
             onTap: () {
@@ -564,6 +716,80 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// شاشة "عرض الكل" للصفحة الرئيسية
+class _SeeAllScreen extends StatelessWidget {
+  final String title;
+  final List<dynamic> items;
+  final String type;
+  final String server;
+  final String username;
+  final String password;
+  final Function(dynamic) onItemTap;
+
+  const _SeeAllScreen({
+    required this.title,
+    required this.items,
+    required this.type,
+    required this.server,
+    required this.username,
+    required this.password,
+    required this.onItemTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0E14),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF111827),
+        title: Text(title),
+      ),
+      body: SafeArea(
+        child: GridView.builder(
+          padding: const EdgeInsets.all(8),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            childAspectRatio: 0.65,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            final name = item.name ?? 'بدون اسم';
+            String poster = '';
+            if (type == 'movie') {
+              poster = item.posterUrl ?? '';
+            } else if (type == 'series') {
+              poster = item.posterUrl ?? '';
+            } else if (type == 'channel') {
+              poster = item.logoUrl ?? '';
+            }
+            return GestureDetector(
+              onTap: () => onItemTap(item),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: poster.isNotEmpty
+                          ? Image.network(poster, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)))
+                          : Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
