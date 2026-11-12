@@ -49,12 +49,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted) setState(() => _isBuffering = buffering);
     });
 
-    _subtitleTracksSubscription = player.stream.tracks.subtitle.listen((tracks) {
-      if (mounted) setState(() => _subtitleTracks = tracks);
+    // تصحيح: استخدام player.stream.tracks ثم استخراج subtitle
+    _subtitleTracksSubscription = player.stream.tracks.listen((tracks) {
+      if (mounted) setState(() => _subtitleTracks = tracks.subtitle);
     });
 
-    _currentSubtitleSubscription = player.stream.track.subtitle.listen((track) {
-      if (mounted) setState(() => _currentSubtitleTrack = track);
+    // تصحيح: استخدام player.stream.track ثم استخراج subtitle
+    _currentSubtitleSubscription = player.stream.track.listen((track) {
+      if (mounted) setState(() => _currentSubtitleTrack = track.subtitle);
     });
 
     _initializeStream();
