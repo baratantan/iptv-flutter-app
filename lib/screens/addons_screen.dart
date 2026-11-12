@@ -26,7 +26,7 @@ class _AddonsScreenState extends State<AddonsScreen>
   Map<String, String> _itemToAddonUrl = {};
   Map<String, String> _itemToType = {};
 
-  final PageController _pageController = PageController(viewportFraction: 1.0); // يملأ العرض بالكامل
+  final PageController _pageController = PageController(viewportFraction: 1.0);
   int _currentBannerIndex = 0;
   Timer? _bannerTimer;
 
@@ -487,6 +487,7 @@ class _AddonsScreenState extends State<AddonsScreen>
             return GestureDetector(
               onTap: () => _playItem(item),
               child: Container(
+                // الصورة تملأ البانر بالكامل
                 decoration: BoxDecoration(
                   image: DecorationImage(
                     image: NetworkImage(item['poster'] ?? ''),
@@ -494,6 +495,7 @@ class _AddonsScreenState extends State<AddonsScreen>
                     onError: (e, s) {},
                   ),
                 ),
+                // تدرج لوني (لدمج الصورة مع الخلفية)
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -507,6 +509,7 @@ class _AddonsScreenState extends State<AddonsScreen>
                       stops: const [0.0, 0.7, 1.0],
                     ),
                   ),
+                  // النص والزر (في طبقة منفصلة)
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -544,6 +547,7 @@ class _AddonsScreenState extends State<AddonsScreen>
             );
           },
         ),
+        // النقاط السفلية
         Positioned(
           bottom: 60,
           left: 0,
@@ -592,7 +596,15 @@ class _AddonsScreenState extends State<AddonsScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+              // العنوان (بدون شعار الإضافة)
+              Expanded(
+                child: Text(
+                  title.split(' - ').last, // إزالة اسم الإضافة من العنوان
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               TextButton(
                 onPressed: () {
                   Navigator.of(context).push(
