@@ -14,24 +14,32 @@ class AddonsScreen extends StatefulWidget {
   State<AddonsScreen> createState() => _AddonsScreenState();
 }
 
-class _AddonsScreenState extends State<AddonsScreen> {
+class _AddonsScreenState extends State<AddonsScreen>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   String? _errorMessage;
-  
+
+  // بيانات العرض
   Map<String, List<Map<String, dynamic>>> _catalogContents = {};
   List<Map<String, dynamic>> _allMovies = [];
   List<Map<String, dynamic>> _allSeries = [];
-  
+
+  // خرائط الربط
   Map<String, String> _itemToAddonUrl = {};
   Map<String, String> _itemToType = {};
 
-  final PageController _pageController = PageController(viewportFraction: 0.9);
+  // البانر
+  final PageController _pageController = PageController(viewportFraction: 1.0);
   int _currentBannerIndex = 0;
   Timer? _bannerTimer;
+
+  // التبويبات
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _loadData();
   }
 
@@ -39,6 +47,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
   void dispose() {
     _bannerTimer?.cancel();
     _pageController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -108,7 +117,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
           for (var item in items) {
             itemToAddonUrl[item['id']] = addon.url;
             itemToType[item['id']] = catalogType;
-            
+
             if (catalogType == 'movie') {
               allMovies.add(item);
             } else if (catalogType == 'series') {
@@ -174,14 +183,14 @@ class _AddonsScreenState extends State<AddonsScreen> {
   Future<List<Map<String, dynamic>>> _fetchEpisodes(String addonUrl, Map<String, dynamic> series) async {
     final metaUrl = '$addonUrl/meta/series/${series['id']}.json';
     final response = await http.get(Uri.parse(metaUrl));
-    
+
     if (response.statusCode != 200) {
       throw Exception('فشل جلب حلقات المسلسل (HTTP ${response.statusCode})');
     }
 
     final jsonData = json.decode(response.body);
     final videos = jsonData['meta']?['videos'] as List? ?? [];
-    
+
     return videos.map<Map<String, dynamic>>((v) => {
       'id': v['id'] ?? '',
       'title': v['title'] ?? v['name'] ?? 'حلقة',
@@ -232,7 +241,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
                       children: seasonEpisodes.map((ep) {
                         final epTitle = ep['title'] ?? 'حلقة ${ep['episode']}';
                         final videoId = ep['id'] ?? '';
-                        
+
                         return ListTile(
                           leading: const Icon(Icons.play_circle_outline, color: Color(0xFFFF5238)),
                           title: Text(epTitle, style: const TextStyle(color: Colors.white70)),
@@ -261,14 +270,14 @@ class _AddonsScreenState extends State<AddonsScreen> {
   Future<List<Map<String, dynamic>>> _fetchStreams(String addonUrl, String type, String videoId) async {
     final streamUrl = '$addonUrl/stream/$type/$videoId.json';
     final response = await http.get(Uri.parse(streamUrl));
-    
+
     if (response.statusCode != 200) {
       throw Exception('فشل جلب الروابط (HTTP ${response.statusCode})');
     }
 
     final jsonData = json.decode(response.body);
     final streams = jsonData['streams'] as List? ?? [];
-    
+
     return streams.map<Map<String, dynamic>>((s) => {
       'title': s['title'] ?? s['name'] ?? 'رابط',
       'url': s['url'] ?? '',
@@ -277,7 +286,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
 
   Widget _buildStreamsSheet(String addonUrl, Map<String, dynamic> item, String type, {String? videoId}) {
     final idToUse = videoId ?? item['id'];
-    
+
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _fetchStreams(addonUrl, type, idToUse),
       builder: (context, snapshot) {
@@ -351,27 +360,37 @@ class _AddonsScreenState extends State<AddonsScreen> {
     _catalogContents.forEach((key, list) => bannerItems.addAll(list));
     final featuredItems = bannerItems.take(6).toList();
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0B0E14),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: const Text('الإضافات'),
-          bottom: const TabBar(
-            indicatorColor: Color(0xFFFF5238),
-            labelColor: Color(0xFFFF5238),
-            unselectedLabelColor: Colors.grey,
-            tabs: [
-              Tab(text: 'الرئيسية'),
-              Tab(text: 'الأفلام'),
-              Tab(text: 'المسلسلات'),
-            ],
-          ),
-        ),
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0E14),
+      // التبويبات تحت البانر (داخل الـ body)
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            SliverAppBar(
+              backgroundColor: const Color(0xFF0B0E14),
+              pinned: true,
+              expandedHeight: MediaQuery.of(context).size.height * 0.5, // 50% من الشاشة
+              flexibleSpace: FlexibleSpaceBar(
+                background: _buildBanner(featuredItems),
+              ),
+              bottom: TabBar(
+                controller: _tabController,
+                indicatorColor: const Color(0xFFFF5238),
+                labelColor: const Color(0xFFFF5238),
+                unselectedLabelColor: Colors.grey,
+                tabs: const [
+                  Tab(text: 'الرئيسية'),
+                  Tab(text: 'الأفلام'),
+                  Tab(text: 'المسلسلات'),
+                ],
+              ),
+            ),
+          ];
+        },
         body: TabBarView(
+          controller: _tabController,
           children: [
-            _buildHomeTab(featuredItems),
+            _buildHomeTab(),
             _buildMediaGrid(_allMovies, 'movie'),
             _buildMediaGrid(_allSeries, 'series'),
           ],
@@ -380,68 +399,112 @@ class _AddonsScreenState extends State<AddonsScreen> {
     );
   }
 
-  Widget _buildHomeTab(List<Map<String, dynamic>> bannerItems) {
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: SizedBox(
-            height: 320,
-            child: PageView.builder(
-              controller: _pageController,
-              itemCount: bannerItems.length,
-              onPageChanged: (index) {
-                _currentBannerIndex = index;
-              },
-              itemBuilder: (context, index) {
-                final item = bannerItems[index];
-                return GestureDetector(
-                  onTap: () => _playItem(item),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 5.0),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      image: DecorationImage(
-                        image: NetworkImage(item['poster'] ?? ''),
-                        fit: BoxFit.cover,
-                        onError: (e, s) {},
-                      ),
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(item['name'], style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              onPressed: () => _playItem(item),
-                              icon: const Icon(Icons.play_arrow),
-                              label: const Text('تشغيل'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFF5238),
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+  Widget _buildBanner(List<Map<String, dynamic>> bannerItems) {
+    if (bannerItems.isEmpty) return Container(color: Colors.black);
+
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: _pageController,
+          itemCount: bannerItems.length,
+          onPageChanged: (index) {
+            setState(() {
+              _currentBannerIndex = index;
+            });
+          },
+          itemBuilder: (context, index) {
+            final item = bannerItems[index];
+            return GestureDetector(
+              onTap: () => _playItem(item),
+              child: Container(
+                // البانر يملأ الشاشة (بدون حواف)
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: NetworkImage(item['poster'] ?? ''),
+                    fit: BoxFit.cover,
+                    onError: (e, s) {},
+                  ),
+                ),
+                child: Container(
+                  // تدرج لوني من الأسفل
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.7),
+                        const Color(0xFF0B0E14),
+                      ],
+                      stops: const [0.0, 0.7, 1.0],
                     ),
                   ),
-                );
-              },
-            ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item['name'] ?? 'بدون اسم',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            shadows: [Shadow(offset: Offset(0, 2), blurRadius: 4, color: Colors.black)],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: () => _playItem(item),
+                          icon: const Icon(Icons.play_arrow, size: 28),
+                          label: const Text('تشغيل', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF5238),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        // النقاط السفلية
+        Positioned(
+          bottom: 60,
+          left: 0,
+          right: 0,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: bannerItems.asMap().entries.map((entry) {
+              return Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _currentBannerIndex == entry.key
+                      ? const Color(0xFFFF5238)
+                      : Colors.grey.withOpacity(0.5),
+                ),
+              );
+            }).toList(),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildHomeTab() {
+    return CustomScrollView(
+      slivers: [
         ..._catalogContents.entries.map((entry) {
           return SliverToBoxAdapter(
             child: _buildHorizontalSection(entry.key, entry.value),
