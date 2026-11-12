@@ -22,6 +22,7 @@ class _AddonsScreenState extends State<AddonsScreen>
   Map<String, List<Map<String, dynamic>>> _catalogContents = {};
   List<Map<String, dynamic>> _allMovies = [];
   List<Map<String, dynamic>> _allSeries = [];
+  List<Map<String, dynamic>> _allAnime = []; // للأنمي (سنستخدم المسلسلات مؤقتاً)
 
   Map<String, String> _itemToAddonUrl = {};
   Map<String, String> _itemToType = {};
@@ -40,7 +41,7 @@ class _AddonsScreenState extends State<AddonsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this); // 4 تبويبات
     _loadData();
   }
 
@@ -101,6 +102,7 @@ class _AddonsScreenState extends State<AddonsScreen>
       Map<String, List<Map<String, dynamic>>> catalogContents = {};
       List<Map<String, dynamic>> allMovies = [];
       List<Map<String, dynamic>> allSeries = [];
+      List<Map<String, dynamic>> allAnime = [];
       Map<String, String> itemToAddonUrl = {};
       Map<String, String> itemToType = {};
 
@@ -124,6 +126,11 @@ class _AddonsScreenState extends State<AddonsScreen>
               allMovies.add(item);
             } else if (catalogType == 'series') {
               allSeries.add(item);
+              // نعتبر أي مسلسل يحتوي على كلمة "anime" في اسمه أو تصنيفه أنه أنمي
+              if ((item['name'] as String).toLowerCase().contains('anime') ||
+                  catalogName.toLowerCase().contains('anime')) {
+                allAnime.add(item);
+              }
             }
           }
         }
@@ -133,6 +140,7 @@ class _AddonsScreenState extends State<AddonsScreen>
         _catalogContents = catalogContents;
         _allMovies = allMovies;
         _allSeries = allSeries;
+        _allAnime = allAnime;
         _itemToAddonUrl = itemToAddonUrl;
         _itemToType = itemToType;
         _isLoading = false;
@@ -405,10 +413,10 @@ class _AddonsScreenState extends State<AddonsScreen>
                 ),
               ],
               flexibleSpace: FlexibleSpaceBar(
-                background: _buildBanner(featuredItems),
+                background: _buildBanner(featuredItems), // البانر بدون تصنيفات
               ),
               bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(100),
+                preferredSize: const Size.fromHeight(130), // مساحة للبحث + شريط التصنيفات
                 child: Column(
                   children: [
                     if (_isSearching)
@@ -431,6 +439,9 @@ class _AddonsScreenState extends State<AddonsScreen>
                           onChanged: _performSearch,
                         ),
                       ),
+                    // شريط التصنيفات (كبسولات)
+                    _buildCategoriesBar(),
+                    // التبويبات (لأنها ضرورية للتبديل بين المحتوى)
                     TabBar(
                       controller: _tabController,
                       indicatorColor: const Color(0xFFFF5238),
@@ -440,6 +451,7 @@ class _AddonsScreenState extends State<AddonsScreen>
                         Tab(text: 'الرئيسية'),
                         Tab(text: 'الأفلام'),
                         Tab(text: 'المسلسلات'),
+                        Tab(text: 'الأنمي'),
                       ],
                     ),
                   ],
@@ -456,7 +468,58 @@ class _AddonsScreenState extends State<AddonsScreen>
                 : _buildHomeTab(),
             _buildMediaGrid(_allMovies, 'movie'),
             _buildMediaGrid(_allSeries, 'series'),
+            _buildMediaGrid(_allAnime, 'series'), // تبويب الأنمي
           ],
+        ),
+      ),
+    );
+  }
+
+  // شريط التصنيفات (كبسولات)
+  Widget _buildCategoriesBar() {
+    return Container(
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _buildCategoryPill('الرئيسية', true, () {
+            _tabController.animateTo(0);
+          }),
+          _buildCategoryPill('الأفلام', false, () {
+            _tabController.animateTo(1);
+          }),
+          _buildCategoryPill('المسلسلات', false, () {
+            _tabController.animateTo(2);
+          }),
+          _buildCategoryPill('الأنمي', false, () {
+            _tabController.animateTo(3);
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryPill(String label, bool isActive, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8.0),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFFFF5238) : const Color(0xFF1F2937),
+            borderRadius: BorderRadius.circular(20), // كبسولة
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isActive ? Colors.white : Colors.grey,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -469,6 +532,7 @@ class _AddonsScreenState extends State<AddonsScreen>
     return _buildMediaGrid(_searchResults, 'movie');
   }
 
+  // البانر (بدون تصنيفات)
   Widget _buildBanner(List<Map<String, dynamic>> bannerItems) {
     if (bannerItems.isEmpty) return Container(color: Colors.black);
 
@@ -516,6 +580,7 @@ class _AddonsScreenState extends State<AddonsScreen>
                       mainAxisAlignment: MainAxisAlignment.end,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // عنوان الفيلم
                         Text(
                           item['name'] ?? 'بدون اسم',
                           style: const TextStyle(
@@ -528,6 +593,7 @@ class _AddonsScreenState extends State<AddonsScreen>
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 12),
+                        // زر التشغيل
                         ElevatedButton.icon(
                           onPressed: () => _playItem(item),
                           icon: const Icon(Icons.play_arrow, size: 28),
@@ -539,6 +605,25 @@ class _AddonsScreenState extends State<AddonsScreen>
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                         ),
+                        // نقاط التمرير (Dots)
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: bannerItems.asMap().entries.map((entry) {
+                            return Container(
+                              width: 8,
+                              height: 8,
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _currentBannerIndex == entry.key
+                                    ? const Color(0xFFFF5238)
+                                    : Colors.grey.withOpacity(0.5),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),
@@ -546,28 +631,6 @@ class _AddonsScreenState extends State<AddonsScreen>
               ),
             );
           },
-        ),
-        // النقاط السفلية
-        Positioned(
-          bottom: 60,
-          left: 0,
-          right: 0,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: bannerItems.asMap().entries.map((entry) {
-              return Container(
-                width: 8,
-                height: 8,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _currentBannerIndex == entry.key
-                      ? const Color(0xFFFF5238)
-                      : Colors.grey.withOpacity(0.5),
-                ),
-              );
-            }).toList(),
-          ),
         ),
       ],
     );
