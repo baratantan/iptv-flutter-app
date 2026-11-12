@@ -19,22 +19,23 @@ class _AddonsScreenState extends State<AddonsScreen>
   bool _isLoading = true;
   String? _errorMessage;
 
-  // بيانات العرض
   Map<String, List<Map<String, dynamic>>> _catalogContents = {};
   List<Map<String, dynamic>> _allMovies = [];
   List<Map<String, dynamic>> _allSeries = [];
 
-  // خرائط الربط
   Map<String, String> _itemToAddonUrl = {};
   Map<String, String> _itemToType = {};
 
-  // البانر
   final PageController _pageController = PageController(viewportFraction: 1.0);
   int _currentBannerIndex = 0;
   Timer? _bannerTimer;
 
-  // التبويبات
   late TabController _tabController;
+
+  // للبحث
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _searchResults = [];
 
   @override
   void initState() {
@@ -48,6 +49,7 @@ class _AddonsScreenState extends State<AddonsScreen>
     _bannerTimer?.cancel();
     _pageController.dispose();
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -346,6 +348,28 @@ class _AddonsScreenState extends State<AddonsScreen>
     );
   }
 
+  // للبحث
+  void _performSearch(String query) {
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+      });
+      return;
+    }
+    final lowerQuery = query.toLowerCase();
+    final List<Map<String, dynamic>> results = [];
+    _catalogContents.forEach((key, items) {
+      for (var item in items) {
+        if ((item['name'] as String).toLowerCase().contains(lowerQuery)) {
+          results.add(item);
+        }
+      }
+    });
+    setState(() {
+      _searchResults = results;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -362,27 +386,64 @@ class _AddonsScreenState extends State<AddonsScreen>
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0E14),
-      // التبويبات تحت البانر (داخل الـ body)
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             SliverAppBar(
               backgroundColor: const Color(0xFF0B0E14),
               pinned: true,
-              expandedHeight: MediaQuery.of(context).size.height * 0.5, // 50% من الشاشة
+              expandedHeight: MediaQuery.of(context).size.height * 0.5,
+              floating: true,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search, color: Color(0xFFFF5238)),
+                  onPressed: () {
+                    setState(() {
+                      _isSearching = !_isSearching;
+                    });
+                  },
+                ),
+              ],
               flexibleSpace: FlexibleSpaceBar(
                 background: _buildBanner(featuredItems),
               ),
-              bottom: TabBar(
-                controller: _tabController,
-                indicatorColor: const Color(0xFFFF5238),
-                labelColor: const Color(0xFFFF5238),
-                unselectedLabelColor: Colors.grey,
-                tabs: const [
-                  Tab(text: 'الرئيسية'),
-                  Tab(text: 'الأفلام'),
-                  Tab(text: 'المسلسلات'),
-                ],
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(100),
+                child: Column(
+                  children: [
+                    if (_isSearching)
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: TextField(
+                          controller: _searchController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'ابحث عن فيلم أو مسلسل...',
+                            hintStyle: const TextStyle(color: Colors.grey),
+                            prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
+                            filled: true,
+                            fillColor: const Color(0xFF1F2937),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          onChanged: _performSearch,
+                        ),
+                      ),
+                    TabBar(
+                      controller: _tabController,
+                      indicatorColor: const Color(0xFFFF5238),
+                      labelColor: const Color(0xFFFF5238),
+                      unselectedLabelColor: Colors.grey,
+                      tabs: const [
+                        Tab(text: 'الرئيسية'),
+                        Tab(text: 'الأفلام'),
+                        Tab(text: 'المسلسلات'),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ];
@@ -390,13 +451,22 @@ class _AddonsScreenState extends State<AddonsScreen>
         body: TabBarView(
           controller: _tabController,
           children: [
-            _buildHomeTab(),
+            _isSearching && _searchController.text.isNotEmpty
+                ? _buildSearchResults()
+                : _buildHomeTab(),
             _buildMediaGrid(_allMovies, 'movie'),
             _buildMediaGrid(_allSeries, 'series'),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildSearchResults() {
+    if (_searchResults.isEmpty) {
+      return const Center(child: Text('لا توجد نتائج', style: TextStyle(color: Colors.grey)));
+    }
+    return _buildMediaGrid(_searchResults, 'movie'); // عرض النتائج في شبكة
   }
 
   Widget _buildBanner(List<Map<String, dynamic>> bannerItems) {
@@ -417,7 +487,6 @@ class _AddonsScreenState extends State<AddonsScreen>
             return GestureDetector(
               onTap: () => _playItem(item),
               child: Container(
-                // البانر يملأ الشاشة (بدون حواف)
                 decoration: BoxDecoration(
                   image: DecorationImage(
                     image: NetworkImage(item['poster'] ?? ''),
@@ -426,7 +495,6 @@ class _AddonsScreenState extends State<AddonsScreen>
                   ),
                 ),
                 child: Container(
-                  // تدرج لوني من الأسفل
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
@@ -476,7 +544,6 @@ class _AddonsScreenState extends State<AddonsScreen>
             );
           },
         ),
-        // النقاط السفلية
         Positioned(
           bottom: 60,
           left: 0,
@@ -522,7 +589,26 @@ class _AddonsScreenState extends State<AddonsScreen>
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => _SeeAllScreen(
+                        title: title,
+                        items: items,
+                        onItemTap: _playItem,
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('عرض الكل', style: TextStyle(color: Color(0xFFFF5238))),
+              ),
+            ],
+          ),
         ),
         SizedBox(
           height: 180,
@@ -597,6 +683,63 @@ class _AddonsScreenState extends State<AddonsScreen>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// شاشة "عرض الكل"
+class _SeeAllScreen extends StatelessWidget {
+  final String title;
+  final List<Map<String, dynamic>> items;
+  final Function(Map<String, dynamic>) onItemTap;
+
+  const _SeeAllScreen({
+    required this.title,
+    required this.items,
+    required this.onItemTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0E14),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF111827),
+        title: Text(title),
+      ),
+      body: SafeArea(
+        child: GridView.builder(
+          padding: const EdgeInsets.all(8),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            childAspectRatio: 0.65,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return GestureDetector(
+              onTap: () => onItemTap(item),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: (item['poster'] != null && item['poster'].isNotEmpty)
+                          ? Image.network(item['poster'], fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)))
+                          : Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(item['name'], maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
