@@ -36,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _username = '';
   String _password = '';
 
-  final PageController _pageController = PageController(viewportFraction: 0.9);
+  final PageController _pageController = PageController(viewportFraction: 1.0); // يملأ العرض بالكامل
   int _currentPage = 0;
   Timer? _timer;
   int _currentTabIndex = 0;
@@ -209,19 +209,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final lowerQuery = query.toLowerCase();
     final List<dynamic> results = [];
     
-    // بحث في الأفلام
     for (var item in _allMovies) {
       if ((item.name ?? '').toLowerCase().contains(lowerQuery)) {
         results.add({'type': 'movie', 'item': item});
       }
     }
-    // بحث في المسلسلات
     for (var item in _allSeries) {
       if ((item.name ?? '').toLowerCase().contains(lowerQuery)) {
         results.add({'type': 'series', 'item': item});
       }
     }
-    // بحث في القنوات
     for (var item in _allLiveChannels) {
       if ((item.name ?? '').toLowerCase().contains(lowerQuery)) {
         results.add({'type': 'channel', 'item': item});
@@ -297,164 +294,196 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHomeTab() {
     return Stack(
       children: [
-        ListView(
-          padding: const EdgeInsets.only(top: 20),
-          children: [
-            // شريط البحث (يظهر عند الضغط على أيقونة البحث)
-            if (_isSearching)
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: TextField(
-                  controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'ابحث في الأفلام والمسلسلات والقنوات...',
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
-                    filled: true,
-                    fillColor: const Color(0xFF1F2937),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  onChanged: _performSearch,
-                ),
-              ),
-            
-            // البانر
-            if (_moviesForBanner.isNotEmpty)
-              SizedBox(
-                height: 320,
-                child: PageView.builder(
-                  controller: _pageController,
-                  itemCount: _moviesForBanner.length,
-                  onPageChanged: (index) {
+        CustomScrollView(
+          slivers: [
+            // البانر السينمائي (داخل SliverAppBar)
+            SliverAppBar(
+              backgroundColor: const Color(0xFF0B0E14),
+              pinned: true,
+              expandedHeight: MediaQuery.of(context).size.height * 0.5, // 50% من الشاشة
+              floating: true,
+              actions: [
+                IconButton(
+                  icon: Icon(_isSearching ? Icons.close : Icons.search, color: Color(0xFFFF5238)),
+                  onPressed: () {
                     setState(() {
-                      _currentPage = index;
+                      _isSearching = !_isSearching;
+                      if (!_isSearching) {
+                        _searchController.clear();
+                        _searchResults = [];
+                      }
                     });
                   },
-                  itemBuilder: (context, index) {
-                    final movie = _moviesForBanner[index];
-                    final url = '$_server/movie/$_username/$_password/${movie.streamId}.mp4';
-                    return GestureDetector(
-                      onTap: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 5.0),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          image: DecorationImage(
-                            image: NetworkImage(movie.posterUrl ?? ''),
-                            fit: BoxFit.cover,
-                            onError: (exception, stackTrace) {},
-                          ),
-                        ),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
-                            ),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  movie.name ?? 'بدون اسم',
-                                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 8),
-                                ElevatedButton.icon(
-                                  onPressed: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
-                                  icon: const Icon(Icons.play_arrow),
-                                  label: const Text('تشغيل الآن'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFFFF5238),
-                                    foregroundColor: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                ),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                background: _buildCinematicBanner(),
+              ),
+            ),
+            
+            // شريط البحث (عند تفعيله)
+            if (_isSearching)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'ابحث في الأفلام والمسلسلات والقنوات...',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
+                      filled: true,
+                      fillColor: const Color(0xFF1F2937),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
                       ),
-                    );
-                  },
+                    ),
+                    onChanged: _performSearch,
+                  ),
                 ),
               ),
-            
-            const SizedBox(height: 16),
-            
-            // أزرار التصنيفات
-            SizedBox(
-              height: 40,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _categories.length,
-                itemBuilder: (context, index) {
-                  final cat = _categories[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: ActionChip(
-                      label: Text(cat.name ?? ''),
-                      backgroundColor: const Color(0xFF1F2937),
-                      labelStyle: const TextStyle(color: Colors.white),
-                      onPressed: () => _openCategory(cat, 'movie'),
-                    ),
-                  );
-                },
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // البحث (النتائج) أو الشرائط
+
+            // المحتوى (نتائج البحث أو الشرائط)
             if (_isSearching && _searchController.text.isNotEmpty)
-              _buildSearchResults()
+              SliverToBoxAdapter(child: _buildSearchResults())
             else ...[
-              _buildHorizontalSection('أحدث الأفلام', _latestMovies, 'movie'),
-              _buildHorizontalSection('أحدث المسلسلات', _latestSeries, 'series'),
-              _buildHorizontalSection('أحدث القنوات', _latestChannels, 'channel'),
+              // أزرار التصنيفات
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 50,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _categories.length,
+                    itemBuilder: (context, index) {
+                      final cat = _categories[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: ActionChip(
+                          label: Text(cat.name ?? ''),
+                          backgroundColor: const Color(0xFF1F2937),
+                          labelStyle: const TextStyle(color: Colors.white),
+                          onPressed: () => _openCategory(cat, 'movie'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              
+              // الشرائط الأفقية
+              SliverToBoxAdapter(child: _buildHorizontalSection('أحدث الأفلام', _latestMovies, 'movie')),
+              SliverToBoxAdapter(child: _buildHorizontalSection('أحدث المسلسلات', _latestSeries, 'series')),
+              SliverToBoxAdapter(child: _buildHorizontalSection('أحدث القنوات', _latestChannels, 'channel')),
+              
+              const SliverToBoxAdapter(child: SizedBox(height: 20)),
             ],
-            
-            const SizedBox(height: 20),
           ],
         ),
-        // زر البحث (العائم)
+      ],
+    );
+  }
+
+  Widget _buildCinematicBanner() {
+    if (_moviesForBanner.isEmpty) return Container(color: Colors.black);
+
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: _pageController,
+          itemCount: _moviesForBanner.length,
+          onPageChanged: (index) {
+            setState(() {
+              _currentPage = index;
+            });
+          },
+          itemBuilder: (context, index) {
+            final movie = _moviesForBanner[index];
+            final url = '$_server/movie/$_username/$_password/${movie.streamId}.mp4';
+            return GestureDetector(
+              onTap: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
+              child: Container(
+                // يملأ الشاشة بالكامل (بدون حواف)
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: NetworkImage(movie.posterUrl ?? ''),
+                    fit: BoxFit.cover,
+                    onError: (e, s) {},
+                  ),
+                ),
+                child: Container(
+                  // تدرج لوني
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.7),
+                        const Color(0xFF0B0E14),
+                      ],
+                      stops: const [0.0, 0.7, 1.0],
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          movie.name ?? 'بدون اسم',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            shadows: [Shadow(offset: Offset(0, 2), blurRadius: 4, color: Colors.black)],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
+                          icon: const Icon(Icons.play_arrow, size: 28),
+                          label: const Text('تشغيل الآن', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF5238),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        // النقاط السفلية
         Positioned(
-          top: 10,
-          right: 16,
-          child: GestureDetector(
-            onTap: () {
-              setState(() {
-                _isSearching = !_isSearching;
-                if (!_isSearching) {
-                  _searchController.clear();
-                  _searchResults = [];
-                }
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withOpacity(0.2)),
-              ),
-              child: Icon(
-                _isSearching ? Icons.close : Icons.search,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
+          bottom: 60,
+          left: 0,
+          right: 0,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: _moviesForBanner.asMap().entries.map((entry) {
+              return Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _currentPage == entry.key
+                      ? const Color(0xFFFF5238)
+                      : Colors.grey.withOpacity(0.5),
+                ),
+              );
+            }).toList(),
           ),
         ),
       ],
@@ -463,7 +492,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSearchResults() {
     if (_searchResults.isEmpty) {
-      return const Center(child: Text('لا توجد نتائج', style: TextStyle(color: Colors.grey)));
+      return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('لا توجد نتائج', style: TextStyle(color: Colors.grey))));
     }
     
     return GridView.builder(
