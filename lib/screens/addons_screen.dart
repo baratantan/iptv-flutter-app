@@ -26,7 +26,7 @@ class _AddonsScreenState extends State<AddonsScreen>
   Map<String, String> _itemToAddonUrl = {};
   Map<String, String> _itemToType = {};
 
-  final PageController _pageController = PageController(viewportFraction: 1.0);
+  final PageController _pageController = PageController(viewportFraction: 1.0); // يملأ العرض بالكامل
   int _currentBannerIndex = 0;
   Timer? _bannerTimer;
 
@@ -466,7 +466,7 @@ class _AddonsScreenState extends State<AddonsScreen>
     if (_searchResults.isEmpty) {
       return const Center(child: Text('لا توجد نتائج', style: TextStyle(color: Colors.grey)));
     }
-    return _buildMediaGrid(_searchResults, 'movie'); // عرض النتائج في شبكة
+    return _buildMediaGrid(_searchResults, 'movie');
   }
 
   Widget _buildBanner(List<Map<String, dynamic>> bannerItems) {
