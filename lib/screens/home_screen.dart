@@ -94,11 +94,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isValidChannel(String? name) {
     if (name == null || name.isEmpty) return false;
     final trimmed = name.trim();
-    // تجاهل إذا كان الاسم يبدأ أو ينتهي بـ # أو - أو *
     if (trimmed.startsWith('#') || trimmed.endsWith('#')) return false;
     if (trimmed.startsWith('-') || trimmed.endsWith('-')) return false;
     if (trimmed.startsWith('*') || trimmed.endsWith('*')) return false;
-    // تجاهل الأسماء القصيرة جداً
     if (trimmed.length < 2) return false;
     return true;
   }
@@ -204,9 +202,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final allMovies = DataService.movies ?? [];
       final allSeries = DataService.series ?? [];
       final vodCategories = DataService.vodCategories ?? [];
-      final liveCategories = DataService.seriesCategories ?? []; // سنستخدم تصنيفات المسلسلات مؤقتاً للقنوات
+      final liveCategories = DataService.seriesCategories ?? [];
       
-      // تصفية القنوات
       final filteredLive = allLive.where((ch) => _isValidChannel(ch.name)).toList();
 
       setState(() {
@@ -727,7 +724,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ============ صفحة القنوات المحدثة ============
   Widget _buildChannelsTab() {
-    // تصفية القنوات حسب البحث والتصنيف
     List<XtLiveChannel> filteredChannels = _allLiveChannels.where((ch) {
       final matchesSearch = _channelSearchQuery.isEmpty ||
           (ch.name ?? '').toLowerCase().contains(_channelSearchQuery.toLowerCase());
@@ -740,7 +736,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return SafeArea(
       child: Column(
         children: [
-          // شريط البحث
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
@@ -765,7 +760,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           
-          // شريط التصنيفات
           SizedBox(
             height: 40,
             child: ListView(
@@ -783,7 +777,6 @@ class _HomeScreenState extends State<HomeScreen> {
           
           const SizedBox(height: 8),
           
-          // قائمة القنوات
           Expanded(
             child: filteredChannels.isEmpty
                 ? const Center(child: Text('لا توجد قنوات', style: TextStyle(color: Colors.grey)))
@@ -999,4 +992,17 @@ class _SeeAllScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       child: poster.isNotEmpty
                           ? Image.network(poster, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)))
-                          : Container(color: Colors.grey[900], child: const Icon(Icons.movie, color:
+                          : Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
