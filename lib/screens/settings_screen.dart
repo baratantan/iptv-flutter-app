@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:muxa_xtream/muxa_xtream.dart';
 import '../models/addon_models.dart';
+import '../services/data_service.dart';
 import 'setup_screen.dart';
 import 'home_screen.dart';
 
@@ -15,11 +17,17 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String _sourceType = 'غير محدد';
   List<AddonConfig> _addons = [];
+  bool _isRefreshing = false;
+
+  // تفاصيل الاشتراك
+  String? _expirationDate;
+  String? _accountStatus;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadSubscriptionInfo();
   }
 
   Future<void> _loadSettings() async {
@@ -41,13 +49,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _saveAddons(List<AddonConfig> addons) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String encoded = json.encode(addons.map((e) => e.toJson()).toList());
-    await prefs.setString('addons_list', encoded);
-    setState(() {
-      _addons = addons;
-    });
+  // جلب تفاصيل الاشتراك من السيرفر
+  Future<void> _loadSubscriptionInfo() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sourceType = prefs.getString('source_type');
+      if (sourceType != 'xtream') return;
+
+      final server = prefs.getString('xtream_server') ?? '';
+      final username = prefs.getString('xtream_username') ?? '';
+      final password = prefs.getString('xtream_password') ?? '';
+
+      if (server.isEmpty) return;
+
+      final portal = XtreamPortal.parse(server);
+      final credentials = XtreamCredentials(username: username, password: password);
+      final client = XtreamClient(portal, credentials);
+
+      final info = await client.getUserAndServerInfo();
+      
+      if (mounted) {
+        setState(() {
+          _expirationDate = info.userInfo?.expDate;
+          _accountStatus = info.userInfo?.status;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load subscription info: $e');
+    }
+  }
+
+  // تحديث بيانات القنوات والأفلام
+  Future<void> _refreshPlaylist() async {
+    setState(() => _isRefreshing = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final server = prefs.getString('xtream_server') ?? '';
+      final username = prefs.getString('xtream_username') ?? '';
+      final password = prefs.getString('xtream_password') ?? '';
+
+      if (server.isEmpty) throw Exception('لا يوجد بيانات اتصال');
+
+      // إجبار التحديث في DataService
+      await DataService.loadXtreamData(
+        server: server,
+        username: username,
+        password: password,
+        forceRefresh: true,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تحديث القنوات والأفلام بنجاح')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل التحديث: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
+
+  // مسح الذاكرة المؤقتة
+  Future<void> _clearCache() async {
+    DataService.clearCache();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم مسح الذاكرة المؤقتة')),
+      );
+    }
   }
 
   Future<void> _logout() async {
@@ -77,7 +151,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               controller: nameController,
               style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
-                labelText: 'اسم الإضافة (مثال: Cinemeta)',
+                labelText: 'اسم الإضافة',
                 labelStyle: TextStyle(color: Colors.grey),
                 enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
                 focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFF5238))),
@@ -114,11 +188,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (result == true && urlController.text.trim().isNotEmpty) {
       String url = urlController.text.trim();
-      // إزالة manifest.json إذا كتبه المستخدم
       if (url.endsWith('/manifest.json')) {
         url = url.substring(0, url.length - '/manifest.json'.length);
       }
-      // إزالة الشرطة المائلة في النهاية
       if (url.endsWith('/')) {
         url = url.substring(0, url.length - 1);
       }
@@ -130,8 +202,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         isEnabled: true,
       );
 
-      await _saveAddons([..._addons, newAddon]);
+      final updatedAddons = [..._addons, newAddon];
+      await _saveAddons(updatedAddons);
     }
+  }
+
+  Future<void> _saveAddons(List<AddonConfig> addons) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String encoded = json.encode(addons.map((e) => e.toJson()).toList());
+    await prefs.setString('addons_list', encoded);
+    setState(() {
+      _addons = addons;
+    });
   }
 
   Future<void> _removeAddon(String id) async {
@@ -156,30 +238,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text('الإعدادات'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: Color(0xFFFF5238)),
-            onPressed: _addNewAddon,
-            tooltip: 'إضافة إضافة جديدة',
-          ),
-        ],
+        // إزالة زر + المكرر (لا يوجد actions)
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // قسم الاشتراك
+          // ============ قسم الاشتراك ============
           const Text('الاشتراك', style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Container(
             decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(12)),
             child: Column(
               children: [
+                // مصدر المحتوى + تفاصيل الاشتراك
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Color(0xFFFF5238)),
                   title: const Text('مصدر المحتوى الحالي', style: TextStyle(color: Colors.white)),
-                  subtitle: Text(_sourceType, style: const TextStyle(color: Colors.grey)),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_sourceType, style: const TextStyle(color: Colors.grey)),
+                      if (_expirationDate != null)
+                        Text(
+                          'تاريخ الانتهاء: ${_expirationDate}',
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                      if (_accountStatus != null)
+                        Text(
+                          'حالة الحساب: ${_accountStatus}',
+                          style: TextStyle(
+                            color: _accountStatus == 'Active' ? Colors.green : Colors.red,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
                 const Divider(height: 1, color: Colors.grey),
+                // تحديث القنوات والأفلام
+                ListTile(
+                  leading: _isRefreshing
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(color: Color(0xFFFF5238), strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh, color: Color(0xFFFF5238)),
+                  title: const Text('تحديث القنوات والأفلام', style: TextStyle(color: Colors.white)),
+                  subtitle: const Text('إعادة جلب البيانات من السيرفر', style: TextStyle(color: Colors.grey)),
+                  onTap: _isRefreshing ? null : _refreshPlaylist,
+                ),
+                const Divider(height: 1, color: Colors.grey),
+                // تغيير بيانات الاشتراك
                 ListTile(
                   leading: const Icon(Icons.edit, color: Color(0xFFFF5238)),
                   title: const Text('تغيير بيانات الاشتراك', style: TextStyle(color: Colors.white)),
@@ -189,6 +299,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 const Divider(height: 1, color: Colors.grey),
+                // تسجيل الخروج
                 ListTile(
                   leading: const Icon(Icons.logout, color: Colors.red),
                   title: const Text('تسجيل الخروج (مسح البيانات)', style: TextStyle(color: Colors.red)),
@@ -214,7 +325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
-          // قسم الإضافات
+          // ============ قسم الإضافات ============
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -233,7 +344,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(12)),
               child: const Center(
-                child: Text('لم يتم إضافة أي إضافة. اضغط على زر + لإضافة إضافة.', style: TextStyle(color: Colors.grey)),
+                child: Text('لم يتم إضافة أي إضافة.', style: TextStyle(color: Colors.grey)),
               ),
             )
           else
@@ -257,7 +368,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
-          // قسم حول التطبيق
+          // ============ قسم إعدادات المشغل ============
+          const Text('إعدادات المشغل', style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(12)),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.speed, color: Color(0xFFFF5238)),
+                  title: const Text('تسريع العتاد (Hardware Acceleration)', style: TextStyle(color: Colors.white)),
+                  subtitle: const Text('مفعّل افتراضياً', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  trailing: Switch(
+                    value: true, // افتراضي
+                    onChanged: (value) {
+                      // يمكن إضافة منطق هنا لاحقاً
+                    },
+                    activeColor: const Color(0xFFFF5238),
+                  ),
+                ),
+                const Divider(height: 1, color: Colors.grey),
+                ListTile(
+                  leading: const Icon(Icons.cleaning_services, color: Color(0xFFFF5238)),
+                  title: const Text('مسح الذاكرة المؤقتة', style: TextStyle(color: Colors.white)),
+                  subtitle: const Text('مسح البيانات المحملة مؤقتاً', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  onTap: _clearCache,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ============ قسم حول التطبيق ============
           const Text('حول التطبيق', style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Container(
