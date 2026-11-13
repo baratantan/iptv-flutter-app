@@ -6,7 +6,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:local_pip/local_pip.dart';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 import 'package:http/http.dart' as http;
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PlayerScreen extends StatefulWidget {
@@ -45,7 +45,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double _subtitleFontSize = 16.0;
   Color _subtitleColor = Colors.white;
 
-  // المفتاح يُقرأ من GitHub Secrets (وليس مكتوباً هنا)
+  // المفتاح يُقرأ من GitHub Secrets
   final String _openSubtitlesApiKey = const String.fromEnvironment('OPENSUBTITLES_API_KEY');
 
   @override
@@ -172,7 +172,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // إيقاف الترجمة
                   ListTile(
                     leading: Icon(
                       _currentSubtitleTrack == null ? Icons.check : Icons.subtitles_off,
@@ -188,7 +187,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     },
                   ),
 
-                  // الترجمات المدمجة
                   ..._subtitleTracks.map((track) {
                     final isSelected = _currentSubtitleTrack == track;
                     return ListTile(
@@ -215,7 +213,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
                   const Divider(color: Colors.grey),
 
-                  // جلب ترجمة عربية
                   ListTile(
                     leading: const Icon(Icons.cloud_download, color: Color(0xFFFF5238)),
                     title: const Text('جلب ترجمة عربية', style: TextStyle(color: Colors.white)),
@@ -226,7 +223,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     },
                   ),
 
-                  // اختيار ملف من الهاتف
                   ListTile(
                     leading: const Icon(Icons.folder_open, color: Color(0xFFFF5238)),
                     title: const Text('اختيار ملف ترجمة من الهاتف', style: TextStyle(color: Colors.white)),
@@ -239,7 +235,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
                   const Divider(color: Colors.grey),
 
-                  // حجم الخط
                   Row(
                     children: [
                       const Text('حجم الخط', style: TextStyle(color: Colors.grey, fontSize: 12)),
@@ -261,7 +256,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ],
                   ),
 
-                  // لون الخط
                   Row(
                     children: [
                       const Text('لون الخط', style: TextStyle(color: Colors.grey, fontSize: 12)),
@@ -309,7 +303,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _fetchArabicSubtitle() async {
     if (_openSubtitlesApiKey.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('مفتاح OpenSubtitles غير مضبوط. تأكد من إضافة GitHub Secret.')),
+        const SnackBar(content: Text('مفتاح OpenSubtitles غير مضبوط.')),
       );
       return;
     }
@@ -341,7 +335,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (subtitles.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('لم يتم العثور على ترجمة عربية لهذا الفيلم')),
+            const SnackBar(content: Text('لم يتم العثور على ترجمة عربية')),
           );
         }
         return;
@@ -395,21 +389,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  // ============ اختيار ملف ترجمة من الهاتف ============
+  // ============ اختيار ملف ترجمة من الهاتف (file_selector) ============
   Future<void> _pickSubtitleFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['srt', 'vtt'],
+      const typeGroup = XTypeGroup(
+        label: 'Subtitles',
+        extensions: ['srt', 'vtt'],
       );
+      final file = await openFile(acceptedTypeGroups: [typeGroup]);
 
-      if (result == null || result.files.single.path == null) return;
-
-      final filePath = result.files.single.path!;
+      if (file == null) return;
 
       await player.setSubtitleTrack(
         SubtitleTrack.uri(
-          'file://$filePath',
+          file.path,
           title: 'ملف من الهاتف',
         ),
       );
