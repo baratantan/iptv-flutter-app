@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:local_pip/local_pip.dart';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PlayerScreen extends StatefulWidget {
   final String streamUrl;
@@ -38,28 +42,48 @@ class _PlayerScreenState extends State<PlayerScreen> {
   List<SubtitleTrack> _subtitleTracks = [];
   SubtitleTrack? _currentSubtitleTrack;
 
+  double _subtitleFontSize = 16.0;
+  Color _subtitleColor = Colors.white;
+
+  // المفتاح يُقرأ من GitHub Secrets (وليس مكتوباً هنا)
+  final String _openSubtitlesApiKey = const String.fromEnvironment('OPENSUBTITLES_API_KEY');
+
   @override
   void initState() {
     super.initState();
     player = Player();
     controller = VideoController(player);
     _checkPipAvailability();
+    _loadSubtitleSettings();
 
     _bufferingSubscription = player.stream.buffering.listen((buffering) {
       if (mounted) setState(() => _isBuffering = buffering);
     });
 
-    // تصحيح: استخدام player.stream.tracks ثم استخراج subtitle
     _subtitleTracksSubscription = player.stream.tracks.listen((tracks) {
       if (mounted) setState(() => _subtitleTracks = tracks.subtitle);
     });
 
-    // تصحيح: استخدام player.stream.track ثم استخراج subtitle
     _currentSubtitleSubscription = player.stream.track.listen((track) {
       if (mounted) setState(() => _currentSubtitleTrack = track.subtitle);
     });
 
     _initializeStream();
+  }
+
+  Future<void> _loadSubtitleSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _subtitleFontSize = prefs.getDouble('subtitle_font_size') ?? 16.0;
+      final colorValue = prefs.getInt('subtitle_color');
+      if (colorValue != null) _subtitleColor = Color(colorValue);
+    });
+  }
+
+  Future<void> _saveSubtitleSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('subtitle_font_size', _subtitleFontSize);
+    await prefs.setInt('subtitle_color', _subtitleColor.value);
   }
 
   Future<void> _checkPipAvailability() async {
@@ -98,10 +122,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _initTorrentStream(String magnetUrl) async {
     try {
-      // محاولة تهيئة محرك التورنت (إذا لم يتم تهيئته مسبقاً)
       await LibtorrentFlutter.init();
     } catch (e) {
-      // إذا فشلت التهيئة، نطبع الخطأ ونكمل
       debugPrint('Torrent init failed: $e');
     }
 
@@ -126,6 +148,288 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  // ============ قائمة الترجمة ============
+  void _showSubtitleOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1F2937),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return SafeArea(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'الترجمة',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // إيقاف الترجمة
+                  ListTile(
+                    leading: Icon(
+                      _currentSubtitleTrack == null ? Icons.check : Icons.subtitles_off,
+                      color: _currentSubtitleTrack == null ? const Color(0xFFFF5238) : Colors.grey,
+                    ),
+                    title: Text(
+                      'إيقاف',
+                      style: TextStyle(color: _currentSubtitleTrack == null ? const Color(0xFFFF5238) : Colors.white),
+                    ),
+                    onTap: () {
+                      player.setSubtitleTrack(SubtitleTrack.no());
+                      Navigator.pop(context);
+                    },
+                  ),
+
+                  // الترجمات المدمجة
+                  ..._subtitleTracks.map((track) {
+                    final isSelected = _currentSubtitleTrack == track;
+                    return ListTile(
+                      leading: Icon(
+                        isSelected ? Icons.check : Icons.subtitles,
+                        color: isSelected ? const Color(0xFFFF5238) : Colors.grey,
+                      ),
+                      title: Text(
+                        track.title ?? track.language ?? 'ترجمة مدمجة',
+                        style: TextStyle(color: isSelected ? const Color(0xFFFF5238) : Colors.white),
+                      ),
+                      onTap: () {
+                        player.setSubtitleTrack(track);
+                        Navigator.pop(context);
+                      },
+                    );
+                  }).toList(),
+
+                  if (_subtitleTracks.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('لا توجد ترجمات مدمجة', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ),
+
+                  const Divider(color: Colors.grey),
+
+                  // جلب ترجمة عربية
+                  ListTile(
+                    leading: const Icon(Icons.cloud_download, color: Color(0xFFFF5238)),
+                    title: const Text('جلب ترجمة عربية', style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('البحث في OpenSubtitles', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _fetchArabicSubtitle();
+                    },
+                  ),
+
+                  // اختيار ملف من الهاتف
+                  ListTile(
+                    leading: const Icon(Icons.folder_open, color: Color(0xFFFF5238)),
+                    title: const Text('اختيار ملف ترجمة من الهاتف', style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('ملفات .srt أو .vtt', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _pickSubtitleFile();
+                    },
+                  ),
+
+                  const Divider(color: Colors.grey),
+
+                  // حجم الخط
+                  Row(
+                    children: [
+                      const Text('حجم الخط', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      Expanded(
+                        child: Slider(
+                          value: _subtitleFontSize,
+                          min: 10,
+                          max: 32,
+                          divisions: 11,
+                          activeColor: const Color(0xFFFF5238),
+                          onChanged: (value) {
+                            setState(() => _subtitleFontSize = value);
+                            _saveSubtitleSettings();
+                            setModalState(() {});
+                          },
+                        ),
+                      ),
+                      Text('${_subtitleFontSize.toInt()}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                    ],
+                  ),
+
+                  // لون الخط
+                  Row(
+                    children: [
+                      const Text('لون الخط', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      const SizedBox(width: 8),
+                      _buildColorOption(Colors.white, setModalState),
+                      _buildColorOption(Colors.yellow, setModalState),
+                      _buildColorOption(Colors.green, setModalState),
+                      _buildColorOption(Colors.cyan, setModalState),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildColorOption(Color color, StateSetter setModalState) {
+    final isSelected = _subtitleColor == color;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _subtitleColor = color);
+        _saveSubtitleSettings();
+        setModalState(() {});
+      },
+      child: Container(
+        margin: const EdgeInsets.only(left: 8),
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected ? const Color(0xFFFF5238) : Colors.transparent,
+            width: 2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============ جلب ترجمة عربية ============
+  Future<void> _fetchArabicSubtitle() async {
+    if (_openSubtitlesApiKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('مفتاح OpenSubtitles غير مضبوط. تأكد من إضافة GitHub Secret.')),
+      );
+      return;
+    }
+
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('جارٍ البحث عن ترجمة عربية...')),
+      );
+
+      final searchUrl = Uri.parse(
+        'https://api.opensubtitles.com/api/v1/subtitles?query=${Uri.encodeComponent(widget.channelName)}&languages=ar',
+      );
+
+      final response = await http.get(
+        searchUrl,
+        headers: {
+          'Api-Key': _openSubtitlesApiKey,
+          'User-Agent': 'PlayerPro v1.0',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('فشل البحث (HTTP ${response.statusCode})');
+      }
+
+      final data = json.decode(response.body);
+      final subtitles = data['data'] as List? ?? [];
+
+      if (subtitles.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('لم يتم العثور على ترجمة عربية لهذا الفيلم')),
+          );
+        }
+        return;
+      }
+
+      final firstSub = subtitles.first;
+      final fileId = firstSub['attributes']?['files']?[0]?['file_id'];
+
+      if (fileId == null) throw Exception('لم يتم العثور على ملف الترجمة');
+
+      final downloadUrl = Uri.parse('https://api.opensubtitles.com/api/v1/download');
+      final downloadResponse = await http.post(
+        downloadUrl,
+        headers: {
+          'Api-Key': _openSubtitlesApiKey,
+          'User-Agent': 'PlayerPro v1.0',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'file_id': fileId}),
+      );
+
+      if (downloadResponse.statusCode != 200) {
+        throw Exception('فشل الحصول على رابط التحميل');
+      }
+
+      final downloadData = json.decode(downloadResponse.body);
+      final link = downloadData['link'];
+
+      if (link == null) throw Exception('رابط التحميل غير متوفر');
+
+      await player.setSubtitleTrack(
+        SubtitleTrack.uri(
+          link,
+          title: 'العربية',
+          language: 'ar',
+        ),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تحميل الترجمة العربية بنجاح')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch subtitle: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل جلب الترجمة: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  // ============ اختيار ملف ترجمة من الهاتف ============
+  Future<void> _pickSubtitleFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['srt', 'vtt'],
+      );
+
+      if (result == null || result.files.single.path == null) return;
+
+      final filePath = result.files.single.path!;
+
+      await player.setSubtitleTrack(
+        SubtitleTrack.uri(
+          'file://$filePath',
+          title: 'ملف من الهاتف',
+        ),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تحميل ملف الترجمة بنجاح')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Failed to pick subtitle: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل تحميل الملف: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  // ============ نسبة العرض ============
   void _showFitOptions() {
     showModalBottomSheet(
       context: context,
@@ -157,51 +461,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         setState(() => _currentFit = fit);
         Navigator.pop(context);
       },
-    );
-  }
-
-  void _showSubtitleOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1F2937),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text('الترجمة', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
-            ListTile(
-              leading: Icon(
-                _currentSubtitleTrack == null ? Icons.check : Icons.subtitles_off,
-                color: _currentSubtitleTrack == null ? const Color(0xFFFF5238) : Colors.grey,
-              ),
-              title: Text('إيقاف', style: TextStyle(color: _currentSubtitleTrack == null ? const Color(0xFFFF5238) : Colors.white)),
-              onTap: () {
-                player.setSubtitleTrack(SubtitleTrack.no());
-                Navigator.pop(context);
-              },
-            ),
-            ..._subtitleTracks.map((track) {
-              final isSelected = _currentSubtitleTrack == track;
-              return ListTile(
-                leading: Icon(isSelected ? Icons.check : Icons.subtitles, color: isSelected ? const Color(0xFFFF5238) : Colors.grey),
-                title: Text(track.title ?? track.language ?? 'ترجمة غير معروفة', style: TextStyle(color: isSelected ? const Color(0xFFFF5238) : Colors.white)),
-                onTap: () {
-                  player.setSubtitleTrack(track);
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-            if (_subtitleTracks.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24.0),
-                child: Text('لا توجد ترجمات متاحة لهذا الفيديو', style: TextStyle(color: Colors.grey)),
-              ),
-          ],
-        ),
-      ),
     );
   }
 
