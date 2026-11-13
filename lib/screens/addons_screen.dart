@@ -34,12 +34,10 @@ class _AddonsScreenState extends State<AddonsScreen>
 
   late TabController _tabController;
 
-  // للبحث
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
 
-  // اسم الإضافة النشطة (للهيدر)
   String _activeAddonName = 'الإضافات';
 
   @override
@@ -58,7 +56,6 @@ class _AddonsScreenState extends State<AddonsScreen>
     super.dispose();
   }
 
-  // دالة ترجمة عناوين الأقسام من البرتغالية/الإنجليزية إلى العربية
   String translateCategory(String title) {
     final Map<String, String> translations = {
       'Filmes Populares': 'الأفلام الشائعة',
@@ -85,19 +82,24 @@ class _AddonsScreenState extends State<AddonsScreen>
       'Latest Series': 'أحدث المسلسلات',
     };
     
-    // البحث عن ترجمة مطابقة
-    if (translations.containsKey(title)) {
-      return translations[title]!;
-    }
-    
-    // البحث عن ترجمة جزئية (يحتوي العنوان على كلمة معروفة)
+    if (translations.containsKey(title)) return translations[title]!;
     for (var entry in translations.entries) {
-      if (title.toLowerCase().contains(entry.key.toLowerCase())) {
-        return entry.value;
-      }
+      if (title.toLowerCase().contains(entry.key.toLowerCase())) return entry.value;
     }
-    
-    return title; // إرجاع العنوان الأصلي إذا لم توجد ترجمة
+    return title;
+  }
+
+  // تعريب كلمات الترجمة والدبلجة
+  String translateTag(String tag) {
+    final Map<String, String> translations = {
+      'Dublado': 'مدبلج',
+      'Legendado': 'مترجم',
+      'Dubbed': 'مدبلج',
+      'Subtitled': 'مترجم',
+      'Sub': 'مترجم',
+      'Dub': 'مدبلج',
+    };
+    return translations[tag] ?? tag;
   }
 
   void _startBannerAutoPlay(List<Map<String, dynamic>> bannerItems) {
@@ -145,7 +147,6 @@ class _AddonsScreenState extends State<AddonsScreen>
         return;
       }
 
-      // حفظ اسم الإضافة الأولى (أو "إضافات متعددة" إذا كان هناك أكثر من واحدة)
       if (mounted) {
         setState(() {
           _activeAddonName = activeAddons.length == 1 
@@ -170,7 +171,6 @@ class _AddonsScreenState extends State<AddonsScreen>
           final catalogType = catalog['type'] as String;
           final items = catalog['items'] as List<Map<String, dynamic>>;
 
-          // استخدام العنوان المترجم
           final translatedName = translateCategory(catalogName);
           final key = '${cache.addonName} - $translatedName';
           catalogContents[key] = items;
@@ -232,15 +232,21 @@ class _AddonsScreenState extends State<AddonsScreen>
     if (type == 'movie') {
       showModalBottomSheet(
         context: context,
-        backgroundColor: const Color(0xFF1F2937),
+        backgroundColor: const Color(0xFF0B0E14),
         isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
         builder: (context) => _buildStreamsSheet(addonUrl, item, 'movie'),
       );
     } else {
       showModalBottomSheet(
         context: context,
-        backgroundColor: const Color(0xFF1F2937),
+        backgroundColor: const Color(0xFF0B0E14),
         isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
         builder: (context) => _buildEpisodesSheet(addonUrl, item),
       );
     }
@@ -294,7 +300,22 @@ class _AddonsScreenState extends State<AddonsScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('حلقات ${series['name']}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'حلقات ${series['name']}',
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               Flexible(
                 child: ListView(
@@ -315,8 +336,11 @@ class _AddonsScreenState extends State<AddonsScreen>
                             Navigator.pop(context);
                             showModalBottomSheet(
                               context: context,
-                              backgroundColor: const Color(0xFF1F2937),
+                              backgroundColor: const Color(0xFF0B0E14),
                               isScrollControlled: true,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                              ),
                               builder: (context) => _buildStreamsSheet(addonUrl, series, 'series', videoId: videoId),
                             );
                           },
@@ -347,7 +371,48 @@ class _AddonsScreenState extends State<AddonsScreen>
     return streams.map<Map<String, dynamic>>((s) => {
       'title': s['title'] ?? s['name'] ?? 'رابط',
       'url': s['url'] ?? '',
+      'name': s['name'] ?? '',
     }).toList();
+  }
+
+  // استخراج اسم السيرفر من عنوان الرابط
+  String _extractServerName(String title) {
+    // محاولة استخراج اسم السيرفر من العنوان (مثل "Zeus", "Badger", إلخ)
+    if (title.contains('Zeus')) return 'Zeus';
+    if (title.contains('Badger')) return 'Badger';
+    if (title.contains('Comet')) return 'Comet';
+    if (title.contains('Torrentio')) return 'Torrentio';
+    if (title.contains('Diamond')) return 'Diamond';
+    if (title.contains('Owl')) return 'Owl';
+    if (title.contains('Eagle')) return 'Eagle';
+    // إذا لم يوجد، استخدم الجزء الأول من العنوان
+    final parts = title.split(' ');
+    if (parts.isNotEmpty) return parts.first;
+    return 'Server';
+  }
+
+  // استخراج الجودة من عنوان الرابط
+  String _extractQuality(String title) {
+    final upperTitle = title.toUpperCase();
+    if (upperTitle.contains('4K') || upperTitle.contains('2160P')) return '4K';
+    if (upperTitle.contains('1080P') || upperTitle.contains('FHD')) return '1080p';
+    if (upperTitle.contains('720P') || upperTitle.contains('HD')) return '720p';
+    if (upperTitle.contains('480P') || upperTitle.contains('SD')) return '480p';
+    if (upperTitle.contains('360P')) return '360p';
+    return '';
+  }
+
+  // استخراج شارات (مدبلج / مترجم) من عنوان الرابط
+  List<String> _extractTags(String title) {
+    final List<String> tags = [];
+    final lowerTitle = title.toLowerCase();
+    if (lowerTitle.contains('dublado') || lowerTitle.contains('dubbed') || lowerTitle.contains('dub')) {
+      tags.add('مدبلج');
+    }
+    if (lowerTitle.contains('legendado') || lowerTitle.contains('subtitled') || lowerTitle.contains('sub')) {
+      tags.add('مترجم');
+    }
+    return tags;
   }
 
   Widget _buildStreamsSheet(String addonUrl, Map<String, dynamic> item, String type, {String? videoId}) {
@@ -374,33 +439,145 @@ class _AddonsScreenState extends State<AddonsScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('روابط البث لـ ${item['name']}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              // عنوان النافذة (اسم الفيلم مرة واحدة)
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'روابط البث لـ ${item['name']}',
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               Flexible(
-                child: ListView.builder(
+                child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: streams.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final stream = streams[index];
-                    final title = stream['title'] ?? 'رابط ${index + 1}';
+                    final title = stream['title'] ?? 'رابط';
+                    final name = stream['name'] ?? '';
                     final url = stream['url'] ?? '';
                     final isTorrent = url.startsWith('magnet:');
+                    
+                    final serverName = _extractServerName(title);
+                    final quality = _extractQuality(title);
+                    final tags = _extractTags(title);
 
-                    return ListTile(
-                      leading: Icon(isTorrent ? Icons.cloud_download : Icons.play_circle, color: const Color(0xFFFF5238)),
-                      title: Text(title, style: const TextStyle(color: Colors.white)),
-                      subtitle: Text(isTorrent ? 'تورنت (P2P)' : 'رابط مباشر', style: const TextStyle(color: Colors.grey)),
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => PlayerScreen(
-                              streamUrl: url,
-                              channelName: item['name'],
+                    return Card(
+                      color: const Color(0xFF1F2937),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => PlayerScreen(
+                                streamUrl: url,
+                                channelName: item['name'],
+                              ),
                             ),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            children: [
+                              // أيقونة النوع
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isTorrent
+                                      ? const Color(0xFFFF5238).withOpacity(0.2)
+                                      : Colors.blue.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  isTorrent ? Icons.cloud_download : Icons.play_circle,
+                                  color: isTorrent ? const Color(0xFFFF5238) : Colors.blue,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // المعلومات
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        // اسم السيرفر
+                                        Text(
+                                          serverName,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        // الجودة
+                                        if (quality.isNotEmpty)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFF5238).withOpacity(0.2),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              quality,
+                                              style: const TextStyle(
+                                                color: Color(0xFFFF5238),
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    // شارات (مدبلج / مترجم)
+                                    Wrap(
+                                      spacing: 4,
+                                      children: tags.map((tag) => Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: tag == 'مدبلج'
+                                              ? Colors.green.withOpacity(0.2)
+                                              : Colors.orange.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          tag,
+                                          style: TextStyle(
+                                            color: tag == 'مدبلج' ? Colors.green : Colors.orange,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      )).toList(),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // أيقونة السهم
+                              const Icon(Icons.chevron_left, color: Colors.grey),
+                            ],
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -449,7 +626,6 @@ class _AddonsScreenState extends State<AddonsScreen>
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0E14),
-      // الهيدر العلوي (اسم الإضافة + زر إدارة)
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: Row(
@@ -466,7 +642,7 @@ class _AddonsScreenState extends State<AddonsScreen>
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const SettingsScreen()),
               ).then((_) {
-                _loadData(); // إعادة التحميل عند العودة
+                _loadData();
               });
             },
             tooltip: 'إدارة الإضافات',
@@ -475,13 +651,11 @@ class _AddonsScreenState extends State<AddonsScreen>
       ),
       body: Column(
         children: [
-          // البانر (بدون تصنيفات)
           SizedBox(
             height: MediaQuery.of(context).size.height * 0.4,
             child: _buildBanner(featuredItems),
           ),
           
-          // شريط التصنيفات (خارج البانر)
           Container(
             color: const Color(0xFF0B0E14),
             child: TabBar(
@@ -498,7 +672,6 @@ class _AddonsScreenState extends State<AddonsScreen>
             ),
           ),
           
-          // شريط البحث (يظهر عند الحاجة)
           if (_isSearching)
             Padding(
               padding: const EdgeInsets.all(8.0),
@@ -520,7 +693,6 @@ class _AddonsScreenState extends State<AddonsScreen>
               ),
             ),
           
-          // زر البحث (عائم)
           Align(
             alignment: Alignment.centerRight,
             child: Padding(
@@ -540,7 +712,6 @@ class _AddonsScreenState extends State<AddonsScreen>
             ),
           ),
           
-          // المحتوى (نتائج البحث أو التبويبات)
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -634,7 +805,6 @@ class _AddonsScreenState extends State<AddonsScreen>
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // نقاط التمرير فقط (بدون تصنيفات)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: bannerItems.asMap().entries.map((entry) {
