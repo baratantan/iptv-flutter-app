@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:muxa_xtream/muxa_xtream.dart';
@@ -36,22 +37,92 @@ class _HomeScreenState extends State<HomeScreen> {
   String _username = '';
   String _password = '';
 
-  final PageController _pageController = PageController(viewportFraction: 1.0); // يملأ العرض بالكامل
+  final PageController _pageController = PageController(viewportFraction: 1.0);
   int _currentPage = 0;
   Timer? _timer;
   int _currentTabIndex = 0;
   int _addonsKey = 0;
 
-  // للبحث
+  // للبحث (في الرئيسية)
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _searchResults = [];
+
+  // للقنوات
+  String _channelSearchQuery = '';
+  String _selectedChannelCategory = 'all';
+  final TextEditingController _channelSearchController = TextEditingController();
+  List<String> _favoriteChannelIds = [];
+  List<XtCategory> _liveCategories = [];
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadFavorites();
     _startAutoPlay();
+  }
+
+  Future<void> _loadFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString('favorite_channels');
+    if (favoritesJson != null) {
+      final List<dynamic> decoded = json.decode(favoritesJson);
+      setState(() {
+        _favoriteChannelIds = decoded.cast<String>();
+      });
+    }
+  }
+
+  Future<void> _saveFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('favorite_channels', json.encode(_favoriteChannelIds));
+  }
+
+  void _toggleFavorite(String channelId) {
+    setState(() {
+      if (_favoriteChannelIds.contains(channelId)) {
+        _favoriteChannelIds.remove(channelId);
+      } else {
+        _favoriteChannelIds.add(channelId);
+      }
+    });
+    _saveFavorites();
+  }
+
+  // تصفية القنوات الفاصلة (###, ---, ***, إلخ)
+  bool _isValidChannel(String? name) {
+    if (name == null || name.isEmpty) return false;
+    final trimmed = name.trim();
+    // تجاهل إذا كان الاسم يبدأ أو ينتهي بـ # أو - أو *
+    if (trimmed.startsWith('#') || trimmed.endsWith('#')) return false;
+    if (trimmed.startsWith('-') || trimmed.endsWith('-')) return false;
+    if (trimmed.startsWith('*') || trimmed.endsWith('*')) return false;
+    // تجاهل الأسماء القصيرة جداً
+    if (trimmed.length < 2) return false;
+    return true;
+  }
+
+  // استخراج جودة البث من اسم القناة
+  String _getQuality(String? name) {
+    if (name == null) return '';
+    final upperName = name.toUpperCase();
+    if (upperName.contains('8K')) return '8K';
+    if (upperName.contains('4K')) return '4K';
+    if (upperName.contains('FHD')) return 'FHD';
+    if (upperName.contains('HD')) return 'HD';
+    if (upperName.contains('SD')) return 'SD';
+    return '';
+  }
+
+  // دالة تنظيف العناوين
+  String cleanTitle(String? title) {
+    if (title == null || title.isEmpty) return 'بدون اسم';
+    String cleaned = title;
+    cleaned = cleaned.replaceAll(RegExp(r'^(4K-TOP\s*-\s*|VOD\s*\|\s*[A-Z]+\s*-\s*|FHD\s*-\s*|SD\s*-\s*|HD\s*-\s*|4K\s*-\s*|UHD\s*-\s*)', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\s*\[?(4K|FHD|UHD|SD|HD)\]?\s*$', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'^[\-\|\s]+'), '');
+    return cleaned.trim();
   }
 
   void _startAutoPlay() {
@@ -76,6 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _timer?.cancel();
     _pageController.dispose();
     _searchController.dispose();
+    _channelSearchController.dispose();
     super.dispose();
   }
 
@@ -91,14 +163,16 @@ class _HomeScreenState extends State<HomeScreen> {
         final playlist = await airo_m3u_parser.parseM3uAsync(m3uContent);
         final entries = playlist.entries; 
         
-        final List<XtLiveChannel> m3uChannels = entries.map((ch) {
-          return XtLiveChannel(
-            streamId: 0,
-            name: ch.name,
-            categoryId: '0',
-            logoUrl: ch.logo,
-          );
-        }).toList();
+        final List<XtLiveChannel> m3uChannels = entries
+            .where((ch) => _isValidChannel(ch.name))
+            .map((ch) {
+              return XtLiveChannel(
+                streamId: 0,
+                name: ch.name,
+                categoryId: '0',
+                logoUrl: ch.logo,
+              );
+            }).toList();
 
         setState(() {
           _allLiveChannels = m3uChannels;
@@ -130,17 +204,22 @@ class _HomeScreenState extends State<HomeScreen> {
       final allMovies = DataService.movies ?? [];
       final allSeries = DataService.series ?? [];
       final vodCategories = DataService.vodCategories ?? [];
+      final liveCategories = DataService.seriesCategories ?? []; // سنستخدم تصنيفات المسلسلات مؤقتاً للقنوات
+      
+      // تصفية القنوات
+      final filteredLive = allLive.where((ch) => _isValidChannel(ch.name)).toList();
 
       setState(() {
-        _allLiveChannels = allLive;
+        _allLiveChannels = filteredLive;
         _allMovies = allMovies;
         _allSeries = allSeries;
 
         _moviesForBanner = allMovies.take(6).toList();
         _latestMovies = allMovies.take(12).toList();
         _latestSeries = allSeries.take(12).toList();
-        _latestChannels = allLive.take(12).toList();
+        _latestChannels = filteredLive.take(12).toList();
         _categories = vodCategories;
+        _liveCategories = liveCategories;
         
         _isLoading = false;
       });
@@ -292,96 +371,88 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHomeTab() {
-    return Stack(
-      children: [
-        CustomScrollView(
-          slivers: [
-            // البانر السينمائي (داخل SliverAppBar)
-            SliverAppBar(
-              backgroundColor: const Color(0xFF0B0E14),
-              pinned: true,
-              expandedHeight: MediaQuery.of(context).size.height * 0.5, // 50% من الشاشة
-              floating: true,
-              actions: [
-                IconButton(
-                  icon: Icon(_isSearching ? Icons.close : Icons.search, color: Color(0xFFFF5238)),
-                  onPressed: () {
-                    setState(() {
-                      _isSearching = !_isSearching;
-                      if (!_isSearching) {
-                        _searchController.clear();
-                        _searchResults = [];
-                      }
-                    });
-                  },
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          backgroundColor: const Color(0xFF0B0E14),
+          pinned: true,
+          expandedHeight: MediaQuery.of(context).size.height * 0.5,
+          floating: true,
+          actions: [
+            IconButton(
+              icon: Icon(_isSearching ? Icons.close : Icons.search, color: const Color(0xFFFF5238)),
+              onPressed: () {
+                setState(() {
+                  _isSearching = !_isSearching;
+                  if (!_isSearching) {
+                    _searchController.clear();
+                    _searchResults = [];
+                  }
+                });
+              },
+            ),
+          ],
+          flexibleSpace: FlexibleSpaceBar(
+            background: _buildCinematicBanner(),
+          ),
+        ),
+        
+        if (_isSearching)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'ابحث في الأفلام والمسلسلات والقنوات...',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
+                  filled: true,
+                  fillColor: const Color(0xFF1F2937),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
-              ],
-              flexibleSpace: FlexibleSpaceBar(
-                background: _buildCinematicBanner(),
+                onChanged: _performSearch,
               ),
             ),
-            
-            // شريط البحث (عند تفعيله)
-            if (_isSearching)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: TextField(
-                    controller: _searchController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'ابحث في الأفلام والمسلسلات والقنوات...',
-                      hintStyle: const TextStyle(color: Colors.grey),
-                      prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
-                      filled: true,
-                      fillColor: const Color(0xFF1F2937),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    onChanged: _performSearch,
-                  ),
-                ),
-              ),
+          ),
 
-            // المحتوى (نتائج البحث أو الشرائط)
-            if (_isSearching && _searchController.text.isNotEmpty)
-              SliverToBoxAdapter(child: _buildSearchResults())
-            else ...[
-              // أزرار التصنيفات
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 50,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _categories.length,
-                    itemBuilder: (context, index) {
-                      final cat = _categories[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(left: 8.0),
-                        child: ActionChip(
-                          label: Text(cat.name ?? ''),
-                          backgroundColor: const Color(0xFF1F2937),
-                          labelStyle: const TextStyle(color: Colors.white),
-                          onPressed: () => _openCategory(cat, 'movie'),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+        if (!_isSearching)
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 50,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: _categories.length,
+                itemBuilder: (context, index) {
+                  final cat = _categories[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: ActionChip(
+                      label: Text(cat.name ?? ''),
+                      backgroundColor: const Color(0xFF1F2937),
+                      labelStyle: const TextStyle(color: Colors.white),
+                      onPressed: () => _openCategory(cat, 'movie'),
+                    ),
+                  );
+                },
               ),
-              
-              // الشرائط الأفقية
-              SliverToBoxAdapter(child: _buildHorizontalSection('أحدث الأفلام', _latestMovies, 'movie')),
-              SliverToBoxAdapter(child: _buildHorizontalSection('أحدث المسلسلات', _latestSeries, 'series')),
-              SliverToBoxAdapter(child: _buildHorizontalSection('أحدث القنوات', _latestChannels, 'channel')),
-              
-              const SliverToBoxAdapter(child: SizedBox(height: 20)),
-            ],
-          ],
-        ),
+            ),
+          ),
+
+        if (_isSearching && _searchController.text.isNotEmpty)
+          SliverToBoxAdapter(child: _buildSearchResults())
+        else ...[
+          SliverToBoxAdapter(child: _buildHorizontalSection('أحدث الأفلام', _latestMovies, 'movie')),
+          SliverToBoxAdapter(child: _buildHorizontalSection('أحدث المسلسلات', _latestSeries, 'series')),
+          SliverToBoxAdapter(child: _buildHorizontalSection('أحدث القنوات', _latestChannels, 'channel')),
+          
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+        ],
       ],
     );
   }
@@ -389,104 +460,96 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildCinematicBanner() {
     if (_moviesForBanner.isEmpty) return Container(color: Colors.black);
 
-    return Stack(
-      children: [
-        PageView.builder(
-          controller: _pageController,
-          itemCount: _moviesForBanner.length,
-          onPageChanged: (index) {
-            setState(() {
-              _currentPage = index;
-            });
-          },
-          itemBuilder: (context, index) {
-            final movie = _moviesForBanner[index];
-            final url = '$_server/movie/$_username/$_password/${movie.streamId}.mp4';
-            return GestureDetector(
-              onTap: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
-              child: Container(
-                // يملأ الشاشة بالكامل (بدون حواف)
-                decoration: BoxDecoration(
-                  image: DecorationImage(
-                    image: NetworkImage(movie.posterUrl ?? ''),
-                    fit: BoxFit.cover,
-                    onError: (e, s) {},
-                  ),
-                ),
-                child: Container(
-                  // تدرج لوني
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.7),
-                        const Color(0xFF0B0E14),
-                      ],
-                      stops: const [0.0, 0.7, 1.0],
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          movie.name ?? 'بدون اسم',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            shadows: [Shadow(offset: Offset(0, 2), blurRadius: 4, color: Colors.black)],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 12),
-                        ElevatedButton.icon(
-                          onPressed: () => _openMovieDetails(movie.name ?? 'فيلم', url, movie.posterUrl),
-                          icon: const Icon(Icons.play_arrow, size: 28),
-                          label: const Text('تشغيل الآن', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF5238),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+    return PageView.builder(
+      controller: _pageController,
+      itemCount: _moviesForBanner.length,
+      onPageChanged: (index) {
+        setState(() {
+          _currentPage = index;
+        });
+      },
+      itemBuilder: (context, index) {
+        final movie = _moviesForBanner[index];
+        final url = '$_server/movie/$_username/$_password/${movie.streamId}.mp4';
+        final displayName = cleanTitle(movie.name);
+        
+        return GestureDetector(
+          onTap: () => _openMovieDetails(displayName, url, movie.posterUrl),
+          child: Container(
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: NetworkImage(movie.posterUrl ?? ''),
+                fit: BoxFit.cover,
+                onError: (e, s) {},
+              ),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.7),
+                    const Color(0xFF0B0E14),
+                  ],
+                  stops: const [0.0, 0.7, 1.0],
                 ),
               ),
-            );
-          },
-        ),
-        // النقاط السفلية
-        Positioned(
-          bottom: 60,
-          left: 0,
-          right: 0,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: _moviesForBanner.asMap().entries.map((entry) {
-              return Container(
-                width: 8,
-                height: 8,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _currentPage == entry.key
-                      ? const Color(0xFFFF5238)
-                      : Colors.grey.withOpacity(0.5),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        shadows: [Shadow(offset: Offset(0, 2), blurRadius: 4, color: Colors.black)],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => _openMovieDetails(displayName, url, movie.posterUrl),
+                      icon: const Icon(Icons.play_arrow, size: 28),
+                      label: const Text('تشغيل الآن', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF5238),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: _moviesForBanner.asMap().entries.map((entry) {
+                        return Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _currentPage == entry.key
+                                ? const Color(0xFFFF5238)
+                                : Colors.grey.withOpacity(0.5),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
-              );
-            }).toList(),
+              ),
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -515,13 +578,13 @@ class _HomeScreenState extends State<HomeScreen> {
         String name = '';
         if (type == 'movie') {
           poster = item.posterUrl ?? '';
-          name = item.name ?? '';
+          name = cleanTitle(item.name);
         } else if (type == 'series') {
           poster = item.posterUrl ?? '';
-          name = item.name ?? '';
+          name = cleanTitle(item.name);
         } else if (type == 'channel') {
           poster = item.logoUrl ?? '';
-          name = item.name ?? '';
+          name = cleanTitle(item.name);
         }
         
         return GestureDetector(
@@ -566,7 +629,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
               TextButton(
                 onPressed: () {
                   Navigator.of(context).push(
@@ -581,10 +644,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         onItemTap: (item) {
                           if (type == 'movie') {
                             final url = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
-                            _openMovieDetails(item.name ?? 'فيلم', url, item.posterUrl);
+                            _openMovieDetails(cleanTitle(item.name), url, item.posterUrl);
                           } else if (type == 'channel') {
                             final url = '$_server/live/$_username/$_password/${item.streamId}.m3u8';
-                            _playStream(url, item.name ?? 'قناة');
+                            _playStream(url, cleanTitle(item.name));
                           } else {
                             _openSeriesDetails(item);
                           }
@@ -606,7 +669,7 @@ class _HomeScreenState extends State<HomeScreen> {
             itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
-              final name = item.name ?? 'بدون اسم';
+              final name = cleanTitle(item.name);
               String poster = '';
               if (type == 'movie') {
                 poster = item.posterUrl ?? '';
@@ -647,7 +710,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 11),
+                            style: const TextStyle(fontSize: 11, color: Colors.white),
                           ),
                         ),
                       ],
@@ -662,22 +725,140 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ============ صفحة القنوات المحدثة ============
   Widget _buildChannelsTab() {
+    // تصفية القنوات حسب البحث والتصنيف
+    List<XtLiveChannel> filteredChannels = _allLiveChannels.where((ch) {
+      final matchesSearch = _channelSearchQuery.isEmpty ||
+          (ch.name ?? '').toLowerCase().contains(_channelSearchQuery.toLowerCase());
+      final matchesCategory = _selectedChannelCategory == 'all' ||
+          (ch.categoryId ?? '') == _selectedChannelCategory ||
+          (_selectedChannelCategory == 'favorites' && _favoriteChannelIds.contains(ch.streamId.toString()));
+      return matchesSearch && matchesCategory;
+    }).toList();
+
     return SafeArea(
-      child: ListView.builder(
-        itemCount: _allLiveChannels.length,
-        itemBuilder: (context, index) {
-          final channel = _allLiveChannels[index];
-          final streamUrl = '$_server/live/$_username/$_password/${channel.streamId}.m3u8';
-          return ListTile(
-            onTap: () => _playStream(streamUrl, channel.name ?? 'قناة'),
-            leading: channel.logoUrl != null && channel.logoUrl!.isNotEmpty
-                ? Image.network(channel.logoUrl!, width: 50, height: 50, errorBuilder: (c, e, s) => const Icon(Icons.tv))
-                : const Icon(Icons.tv),
-            title: Text(channel.name ?? 'بدون اسم'),
-            subtitle: Text('ID: ${channel.streamId}'),
-          );
+      child: Column(
+        children: [
+          // شريط البحث
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _channelSearchController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'ابحث عن قناة...',
+                hintStyle: const TextStyle(color: Colors.grey),
+                prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
+                filled: true,
+                fillColor: const Color(0xFF1F2937),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _channelSearchQuery = value;
+                });
+              },
+            ),
+          ),
+          
+          // شريط التصنيفات
+          SizedBox(
+            height: 40,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                _buildChannelCategoryChip('all', 'الكل'),
+                _buildChannelCategoryChip('favorites', '⭐ المفضلة'),
+                ..._liveCategories.map((cat) {
+                  return _buildChannelCategoryChip(cat.id ?? '', cat.name ?? '');
+                }).toList(),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // قائمة القنوات
+          Expanded(
+            child: filteredChannels.isEmpty
+                ? const Center(child: Text('لا توجد قنوات', style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    itemCount: filteredChannels.length,
+                    itemBuilder: (context, index) {
+                      final channel = filteredChannels[index];
+                      final quality = _getQuality(channel.name);
+                      final isFavorite = _favoriteChannelIds.contains(channel.streamId.toString());
+                      
+                      return ListTile(
+                        onTap: () {
+                          final streamUrl = '$_server/live/$_username/$_password/${channel.streamId}.m3u8';
+                          _playStream(streamUrl, cleanTitle(channel.name));
+                        },
+                        leading: channel.logoUrl != null && channel.logoUrl!.isNotEmpty
+                            ? Image.network(channel.logoUrl!, width: 50, height: 50, errorBuilder: (c, e, s) => const Icon(Icons.tv))
+                            : const Icon(Icons.tv),
+                        title: Text(cleanTitle(channel.name)),
+                        subtitle: quality.isNotEmpty
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF5238).withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  quality,
+                                  style: const TextStyle(color: Color(0xFFFF5238), fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              )
+                            : null,
+                        trailing: IconButton(
+                          icon: Icon(
+                            isFavorite ? Icons.star : Icons.star_border,
+                            color: isFavorite ? Colors.amber : Colors.grey,
+                          ),
+                          onPressed: () => _toggleFavorite(channel.streamId.toString()),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChannelCategoryChip(String id, String name) {
+    final isSelected = _selectedChannelCategory == id;
+    return Padding(
+      padding: const EdgeInsets.only(left: 8.0),
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedChannelCategory = id;
+          });
         },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFFF5238) : const Color(0xFF1F2937),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Center(
+            child: Text(
+              name,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -697,7 +878,7 @@ class _HomeScreenState extends State<HomeScreen> {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
-          final name = item.name ?? 'بدون اسم';
+          final name = cleanTitle(item.name);
           final poster = type == 'movie' ? (item.posterUrl ?? '') : (item.posterUrl ?? '');
 
           return GestureDetector(
@@ -770,6 +951,15 @@ class _SeeAllScreen extends StatelessWidget {
     required this.onItemTap,
   });
 
+  static String _cleanTitleStatic(String? title) {
+    if (title == null || title.isEmpty) return 'بدون اسم';
+    String cleaned = title;
+    cleaned = cleaned.replaceAll(RegExp(r'^(4K-TOP\s*-\s*|VOD\s*\|\s*[A-Z]+\s*-\s*|FHD\s*-\s*|SD\s*-\s*|HD\s*-\s*|4K\s*-\s*|UHD\s*-\s*)', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\s*\[?(4K|FHD|UHD|SD|HD)\]?\s*$', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'^[\-\|\s]+'), '');
+    return cleaned.trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -790,7 +980,7 @@ class _SeeAllScreen extends StatelessWidget {
           itemCount: items.length,
           itemBuilder: (context, index) {
             final item = items[index];
-            final name = item.name ?? 'بدون اسم';
+            final name = _cleanTitleStatic(item.name);
             String poster = '';
             if (type == 'movie') {
               poster = item.posterUrl ?? '';
@@ -809,17 +999,4 @@ class _SeeAllScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       child: poster.isNotEmpty
                           ? Image.network(poster, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)))
-                          : Container(color: Colors.grey[900], child: const Icon(Icons.movie, color: Colors.grey)),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
+                          : Container(color: Colors.grey[900], child: const Icon(Icons.movie, color:
