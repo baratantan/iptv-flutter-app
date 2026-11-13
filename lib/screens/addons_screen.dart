@@ -89,7 +89,6 @@ class _AddonsScreenState extends State<AddonsScreen>
     return title;
   }
 
-  // تعريب كلمات الترجمة والدبلجة
   String translateTag(String tag) {
     final Map<String, String> translations = {
       'Dublado': 'مدبلج',
@@ -375,9 +374,7 @@ class _AddonsScreenState extends State<AddonsScreen>
     }).toList();
   }
 
-  // استخراج اسم السيرفر من عنوان الرابط
   String _extractServerName(String title) {
-    // محاولة استخراج اسم السيرفر من العنوان (مثل "Zeus", "Badger", إلخ)
     if (title.contains('Zeus')) return 'Zeus';
     if (title.contains('Badger')) return 'Badger';
     if (title.contains('Comet')) return 'Comet';
@@ -385,13 +382,11 @@ class _AddonsScreenState extends State<AddonsScreen>
     if (title.contains('Diamond')) return 'Diamond';
     if (title.contains('Owl')) return 'Owl';
     if (title.contains('Eagle')) return 'Eagle';
-    // إذا لم يوجد، استخدم الجزء الأول من العنوان
     final parts = title.split(' ');
     if (parts.isNotEmpty) return parts.first;
     return 'Server';
   }
 
-  // استخراج الجودة من عنوان الرابط
   String _extractQuality(String title) {
     final upperTitle = title.toUpperCase();
     if (upperTitle.contains('4K') || upperTitle.contains('2160P')) return '4K';
@@ -402,7 +397,6 @@ class _AddonsScreenState extends State<AddonsScreen>
     return '';
   }
 
-  // استخراج شارات (مدبلج / مترجم) من عنوان الرابط
   List<String> _extractTags(String title) {
     final List<String> tags = [];
     final lowerTitle = title.toLowerCase();
@@ -439,7 +433,6 @@ class _AddonsScreenState extends State<AddonsScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // عنوان النافذة (اسم الفيلم مرة واحدة)
               Row(
                 children: [
                   Expanded(
@@ -465,7 +458,6 @@ class _AddonsScreenState extends State<AddonsScreen>
                   itemBuilder: (context, index) {
                     final stream = streams[index];
                     final title = stream['title'] ?? 'رابط';
-                    final name = stream['name'] ?? '';
                     final url = stream['url'] ?? '';
                     final isTorrent = url.startsWith('magnet:');
                     
@@ -495,7 +487,6 @@ class _AddonsScreenState extends State<AddonsScreen>
                           padding: const EdgeInsets.all(12.0),
                           child: Row(
                             children: [
-                              // أيقونة النوع
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
@@ -511,14 +502,12 @@ class _AddonsScreenState extends State<AddonsScreen>
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              // المعلومات
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
                                       children: [
-                                        // اسم السيرفر
                                         Text(
                                           serverName,
                                           style: const TextStyle(
@@ -528,7 +517,6 @@ class _AddonsScreenState extends State<AddonsScreen>
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        // الجودة
                                         if (quality.isNotEmpty)
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -548,7 +536,6 @@ class _AddonsScreenState extends State<AddonsScreen>
                                       ],
                                     ),
                                     const SizedBox(height: 4),
-                                    // شارات (مدبلج / مترجم)
                                     Wrap(
                                       spacing: 4,
                                       children: tags.map((tag) => Container(
@@ -572,7 +559,6 @@ class _AddonsScreenState extends State<AddonsScreen>
                                   ],
                                 ),
                               ),
-                              // أيقونة السهم
                               const Icon(Icons.chevron_left, color: Colors.grey),
                             ],
                           ),
@@ -671,59 +657,46 @@ class _AddonsScreenState extends State<AddonsScreen>
               ],
             ),
           ),
-          
-          if (_isSearching)
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'ابحث عن فيلم أو مسلسل...',
-                  hintStyle: const TextStyle(color: Colors.grey),
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
-                  filled: true,
-                  fillColor: const Color(0xFF1F2937),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
+
+          // شريط البحث الكامل (دائماً ظاهر)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'ابحث في الإضافة...',
+                hintStyle: const TextStyle(color: Colors.grey),
+                prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
+                filled: true,
+                fillColor: const Color(0xFF1F2937),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
                 ),
-                onChanged: _performSearch,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               ),
-            ),
-          
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: IconButton(
-                icon: Icon(_isSearching ? Icons.close : Icons.search, color: const Color(0xFFFF5238)),
-                onPressed: () {
-                  setState(() {
-                    _isSearching = !_isSearching;
-                    if (!_isSearching) {
-                      _searchController.clear();
-                      _searchResults = [];
-                    }
-                  });
-                },
-              ),
+              onChanged: (value) {
+                setState(() {
+                  _isSearching = value.isNotEmpty;
+                  _performSearch(value);
+                });
+              },
             ),
           ),
           
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _isSearching && _searchController.text.isNotEmpty
-                    ? _buildSearchResults()
-                    : _buildHomeTab(),
-                _buildMediaGrid(_allMovies, 'movie'),
-                _buildMediaGrid(_allSeries, 'series'),
-                _buildMediaGrid(_allAnime, 'series'),
-              ],
-            ),
+            child: _isSearching && _searchController.text.isNotEmpty
+                ? _buildSearchResults()
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildHomeTab(),
+                      _buildMediaGrid(_allMovies, 'movie'),
+                      _buildMediaGrid(_allSeries, 'series'),
+                      _buildMediaGrid(_allAnime, 'series'),
+                    ],
+                  ),
           ),
         ],
       ),
