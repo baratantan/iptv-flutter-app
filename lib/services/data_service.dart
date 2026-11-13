@@ -28,7 +28,7 @@ class DataService {
   static List<XtSeriesItem>? _cachedSeries;
   static List<XtCategory>? _cachedVodCategories;
   static List<XtCategory>? _cachedSeriesCategories;
-  static List<XtCategory>? _cachedLiveCategories; // جديد: تصنيفات القنوات
+  static List<XtCategory>? _cachedLiveCategories;
   static DateTime? _xtreamCacheTime;
 
   // تخزين مؤقت لبيانات الإضافات
@@ -54,14 +54,13 @@ class DataService {
     final credentials = XtreamCredentials(username: username, password: password);
     final client = XtreamClient(portal, credentials);
 
-    // جلب كل البيانات (بما فيها تصنيفات القنوات)
     final results = await Future.wait([
       client.getLiveStreams(),
       client.getVodStreams(),
       client.getSeries(),
       client.getVodCategories(),
       client.getSeriesCategories(),
-      client.getLiveCategories(), // جديد
+      client.getLiveCategories(),
     ]);
 
     _cachedLiveChannels = await compute(_parseChannels, results[0]);
@@ -69,7 +68,7 @@ class DataService {
     _cachedSeries = await compute(_parseSeries, results[2]);
     _cachedVodCategories = await compute(_parseCategories, results[3]);
     _cachedSeriesCategories = await compute(_parseCategories, results[4]);
-    _cachedLiveCategories = await compute(_parseCategories, results[5]); // جديد
+    _cachedLiveCategories = await compute(_parseCategories, results[5]);
     _xtreamCacheTime = DateTime.now();
   }
 
@@ -78,7 +77,7 @@ class DataService {
   static List<XtSeriesItem>? get series => _cachedSeries;
   static List<XtCategory>? get vodCategories => _cachedVodCategories;
   static List<XtCategory>? get seriesCategories => _cachedSeriesCategories;
-  static List<XtCategory>? get liveCategories => _cachedLiveCategories; // جديد
+  static List<XtCategory>? get liveCategories => _cachedLiveCategories;
 
   // ============ الإضافات ============
 
@@ -102,7 +101,8 @@ class DataService {
 
       for (var catalog in catalogs) {
         try {
-          final catalogUrl = '$addonUrl/catalog/${catalog['type']}/${catalog['id']}.json';
+          // إضافة معامل اللغة (ar-SA) لطلب الكتالوج
+          final catalogUrl = '$addonUrl/catalog/${catalog['type']}/${catalog['id']}.json?lang=ar-SA';
           final catalogResponse = await _client.get(Uri.parse(catalogUrl));
 
           if (catalogResponse.statusCode == 200) {
@@ -142,7 +142,7 @@ class DataService {
     _cachedSeries = null;
     _cachedVodCategories = null;
     _cachedSeriesCategories = null;
-    _cachedLiveCategories = null; // جديد
+    _cachedLiveCategories = null;
     _xtreamCacheTime = null;
     _addonCache.clear();
   }
