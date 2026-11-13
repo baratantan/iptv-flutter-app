@@ -121,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return '';
   }
 
+  // دالة تنظيف العناوين (للأفلام والقنوات)
   String cleanTitle(String? title) {
     if (title == null || title.isEmpty) return 'بدون اسم';
     String cleaned = title;
@@ -130,25 +131,51 @@ class _HomeScreenState extends State<HomeScreen> {
     return cleaned.trim();
   }
 
+  // دالة تنظيف أسماء الأفلام (تزيل البادئات والسنة و MULTI-SUB)
   Map<String, String> parseMovieTitle(String? title) {
     if (title == null || title.isEmpty) {
-      return {'name': 'بدون اسم', 'year': ''};
+      return {'name': 'بدون اسم', 'year': '', 'hasSub': 'false'};
     }
     String cleaned = title;
     String year = '';
+    String hasSub = 'false';
     
+    // إزالة البادئات مثل "EN - " أو "AR - "
     cleaned = cleaned.replaceAll(RegExp(r'^[A-Z]{2,3}\s*-\s*', caseSensitive: false), '');
     cleaned = cleaned.replaceAll(RegExp(r'^VOD\s*\|\s*[A-Z]{2,3}\s*-\s*', caseSensitive: false), '');
     
+    // التحقق من وجود MULTI-SUB
+    if (cleaned.toUpperCase().contains('MULTI-SUB')) {
+      hasSub = 'true';
+    }
+    
+    // إزالة MULTI-SUB من الاسم
+    cleaned = cleaned.replaceAll(RegExp(r'\s*-\s*\[?MULTI-SUB\]?', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\[?MULTI-SUB\]?', caseSensitive: false), '');
+    
+    // استخراج السنة (4 أرقام بين 1900 و 2099)
     final yearMatch = RegExp(r'\b(19\d{2}|20\d{2})\b').firstMatch(cleaned);
     if (yearMatch != null) {
       year = yearMatch.group(1) ?? '';
       cleaned = cleaned.replaceFirst(yearMatch.group(0)!, '').trim();
     }
     
+    // إزالة الرموز المتبقية
     cleaned = cleaned.replaceAll(RegExp(r'\s*-\s*$'), '').trim();
+    cleaned = cleaned.replaceAll(RegExp(r'^[\-\|\s]+'), '').trim();
     
-    return {'name': cleaned.isEmpty ? 'بدون اسم' : cleaned, 'year': year};
+    return {'name': cleaned.isEmpty ? 'بدون اسم' : cleaned, 'year': year, 'hasSub': hasSub};
+  }
+
+  // دالة تنظيف أسماء المسلسلات
+  String cleanSeriesTitle(String? title) {
+    if (title == null || title.isEmpty) return 'بدون اسم';
+    String cleaned = title;
+    cleaned = cleaned.replaceAll(RegExp(r'^[A-Z]{2,3}\s*-\s*', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\s*-\s*\[?MULTI-SUB\]?', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\[?MULTI-SUB\]?', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return cleaned;
   }
 
   void _startAutoPlay() {
@@ -232,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final allMovies = DataService.movies ?? [];
       final allSeries = DataService.series ?? [];
       final vodCategories = DataService.vodCategories ?? [];
-      final liveCategories = DataService.liveCategories ?? []; // ← جديد: تصنيفات القنوات
+      final liveCategories = DataService.liveCategories ?? [];
       final seriesCategories = DataService.seriesCategories ?? [];
       
       final filteredLive = allLive.where((ch) => _isValidChannel(ch.name)).toList();
@@ -247,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _latestSeries = allSeries.take(12).toList();
         _latestChannels = filteredLive.take(12).toList();
         _categories = vodCategories;
-        _liveCategories = liveCategories; // ← جديد
+        _liveCategories = liveCategories;
         _seriesCategories = seriesCategories;
         
         _isLoading = false;
@@ -611,7 +638,7 @@ class _HomeScreenState extends State<HomeScreen> {
           name = parseMovieTitle(item.name)['name'] ?? '';
         } else if (type == 'series') {
           poster = item.posterUrl ?? '';
-          name = cleanTitle(item.name);
+          name = cleanSeriesTitle(item.name);
         } else if (type == 'channel') {
           poster = item.logoUrl ?? '';
           name = cleanTitle(item.name);
@@ -755,9 +782,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ============ صفحة القنوات (المحدثة) ============
+  // ============ صفحة القنوات ============
   Widget _buildChannelsTab() {
-    // فلترة التصنيفات الفارغة
     final validCategories = _liveCategories.where((cat) {
       final catId = cat.id ?? '';
       return _allLiveChannels.any((ch) => (ch.categoryId ?? '') == catId);
@@ -965,6 +991,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       final parsed = parseMovieTitle(item.name);
                       final displayName = parsed['name'] ?? 'بدون اسم';
                       final year = parsed['year'] ?? '';
+                      final hasSub = parsed['hasSub'] == 'true';
                       final poster = item.posterUrl ?? '';
                       
                       return GestureDetector(
@@ -989,6 +1016,24 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Text(displayName, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
                               ],
                             ),
+                            // شارة SUB (في الزاوية العلوية اليسرى)
+                            if (hasSub)
+                              Positioned(
+                                top: 4,
+                                left: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'SUB',
+                                    style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            // شارة السنة (في الزاوية العلوية اليمنى)
                             if (year.isNotEmpty)
                               Positioned(
                                 top: 4,
@@ -1114,24 +1159,47 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemCount: filteredSeries.length,
                     itemBuilder: (context, index) {
                       final item = filteredSeries[index];
-                      final cleanedName = cleanTitle(item.name);
+                      final originalName = item.name ?? '';
+                      final cleanedName = cleanSeriesTitle(originalName);
+                      final hasSub = originalName.toUpperCase().contains('MULTI-SUB');
                       final poster = item.posterUrl ?? '';
                       
                       return GestureDetector(
                         onTap: () => _openSeriesDetails(item),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                        child: Stack(
                           children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: poster.isNotEmpty
-                                    ? Image.network(poster, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[900], child: const Icon(Icons.video_library, color: Colors.grey)))
-                                    : Container(color: Colors.grey[900], child: const Icon(Icons.video_library, color: Colors.grey)),
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: poster.isNotEmpty
+                                        ? Image.network(poster, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey[900], child: const Icon(Icons.video_library, color: Colors.grey)))
+                                        : Container(color: Colors.grey[900], child: const Icon(Icons.video_library, color: Colors.grey)),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(cleanedName, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(cleanedName, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                            // شارة SUB (في الزاوية العلوية اليسرى)
+                            if (hasSub)
+                              Positioned(
+                                top: 4,
+                                left: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'SUB',
+                                    style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       );
