@@ -121,13 +121,21 @@ class _HomeScreenState extends State<HomeScreen> {
     return '';
   }
 
-  // دالة تنظيف العناوين (للأفلام والقنوات)
+  // دالة تنظيف العناوين (للأفلام والقنوات) - محسنة لإزالة الجودة والرموز
   String cleanTitle(String? title) {
     if (title == null || title.isEmpty) return 'بدون اسم';
     String cleaned = title;
+    // إزالة البادئات التقنية
     cleaned = cleaned.replaceAll(RegExp(r'^(4K-TOP\s*-\s*|VOD\s*\|\s*[A-Z]+\s*-\s*|FHD\s*-\s*|SD\s*-\s*|HD\s*-\s*|4K\s*-\s*|UHD\s*-\s*)', caseSensitive: false), '');
-    cleaned = cleaned.replaceAll(RegExp(r'\s*\[?(4K|FHD|UHD|SD|HD)\]?\s*$', caseSensitive: false), '');
+    // إزالة كلمات الجودة من النهاية
+    cleaned = cleaned.replaceAll(RegExp(r'\s+(8K|4K|FHD|UHD|HD|SD)\s*$', caseSensitive: false), '');
+    // إزالة الرموز الدائرية من النهاية
+    cleaned = cleaned.replaceAll(RegExp(r'\s*[◉●○◎]\s*$'), '');
+    // إزالة الأقواس المربعة
+    cleaned = cleaned.replaceAll(RegExp(r'\s*\[?(8K|4K|FHD|UHD|HD|SD)\]?\s*$', caseSensitive: false), '');
+    // إزالة الرموز المتبقية
     cleaned = cleaned.replaceAll(RegExp(r'^[\-\|\s]+'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\s*[◉●○◎]\s*'), ' ');
     return cleaned.trim();
   }
 
@@ -140,27 +148,22 @@ class _HomeScreenState extends State<HomeScreen> {
     String year = '';
     String hasSub = 'false';
     
-    // إزالة البادئات مثل "EN - " أو "AR - "
     cleaned = cleaned.replaceAll(RegExp(r'^[A-Z]{2,3}\s*-\s*', caseSensitive: false), '');
     cleaned = cleaned.replaceAll(RegExp(r'^VOD\s*\|\s*[A-Z]{2,3}\s*-\s*', caseSensitive: false), '');
     
-    // التحقق من وجود MULTI-SUB
     if (cleaned.toUpperCase().contains('MULTI-SUB')) {
       hasSub = 'true';
     }
     
-    // إزالة MULTI-SUB من الاسم
     cleaned = cleaned.replaceAll(RegExp(r'\s*-\s*\[?MULTI-SUB\]?', caseSensitive: false), '');
     cleaned = cleaned.replaceAll(RegExp(r'\[?MULTI-SUB\]?', caseSensitive: false), '');
     
-    // استخراج السنة (4 أرقام بين 1900 و 2099)
     final yearMatch = RegExp(r'\b(19\d{2}|20\d{2})\b').firstMatch(cleaned);
     if (yearMatch != null) {
       year = yearMatch.group(1) ?? '';
       cleaned = cleaned.replaceFirst(yearMatch.group(0)!, '').trim();
     }
     
-    // إزالة الرموز المتبقية
     cleaned = cleaned.replaceAll(RegExp(r'\s*-\s*$'), '').trim();
     cleaned = cleaned.replaceAll(RegExp(r'^[\-\|\s]+'), '').trim();
     
@@ -782,7 +785,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ============ صفحة القنوات ============
+  // ============ صفحة القنوات (المحدثة) ============
   Widget _buildChannelsTab() {
     final validCategories = _liveCategories.where((cat) {
       final catId = cat.id ?? '';
@@ -862,16 +865,21 @@ class _HomeScreenState extends State<HomeScreen> {
                             : const Icon(Icons.tv),
                         title: Text(cleanTitle(channel.name)),
                         subtitle: quality.isNotEmpty
-                            ? Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFF5238).withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  quality,
-                                  style: const TextStyle(color: Color(0xFFFF5238), fontSize: 10, fontWeight: FontWeight.bold),
-                                ),
+                            ? Wrap(
+                                alignment: WrapAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFF5238).withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      quality,
+                                      style: const TextStyle(color: Color(0xFFFF5238), fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
                               )
                             : null,
                         trailing: IconButton(
@@ -1016,7 +1024,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Text(displayName, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
                               ],
                             ),
-                            // شارة SUB (في الزاوية العلوية اليسرى)
                             if (hasSub)
                               Positioned(
                                 top: 4,
@@ -1033,7 +1040,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
                               ),
-                            // شارة السنة (في الزاوية العلوية اليمنى)
                             if (year.isNotEmpty)
                               Positioned(
                                 top: 4,
@@ -1183,7 +1189,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Text(cleanedName, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
                               ],
                             ),
-                            // شارة SUB (في الزاوية العلوية اليسرى)
                             if (hasSub)
                               Positioned(
                                 top: 4,
@@ -1322,7 +1327,10 @@ String cleanTitle(String? title) {
   if (title == null || title.isEmpty) return 'بدون اسم';
   String cleaned = title;
   cleaned = cleaned.replaceAll(RegExp(r'^(4K-TOP\s*-\s*|VOD\s*\|\s*[A-Z]+\s*-\s*|FHD\s*-\s*|SD\s*-\s*|HD\s*-\s*|4K\s*-\s*|UHD\s*-\s*)', caseSensitive: false), '');
-  cleaned = cleaned.replaceAll(RegExp(r'\s*\[?(4K|FHD|UHD|SD|HD)\]?\s*$', caseSensitive: false), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\s+(8K|4K|FHD|UHD|HD|SD)\s*$', caseSensitive: false), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\s*[◉●○◎]\s*$'), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\s*\[?(8K|4K|FHD|UHD|HD|SD)\]?\s*$', caseSensitive: false), '');
   cleaned = cleaned.replaceAll(RegExp(r'^[\-\|\s]+'), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\s*[◉●○◎]\s*'), ' ');
   return cleaned.trim();
 }
