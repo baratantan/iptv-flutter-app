@@ -107,7 +107,10 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         if (mounted) {
           setState(() {
             _plot = info.plot;
-            _duration = info.duration;
+            // تحويل Duration إلى نص
+            _duration = info.duration?.inMinutes != null 
+                ? '${info.duration!.inMinutes} دقيقة' 
+                : null;
             _rating = info.rating?.toString();
             _releaseDate = info.year?.toString();
             _isLoading = false;
