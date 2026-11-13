@@ -4,7 +4,7 @@ import 'movie_details_screen.dart';
 
 class CategoryScreen extends StatefulWidget {
   final XtCategory category;
-  final String type; 
+  final String type;
   final String server;
   final String username;
   final String password;
@@ -76,7 +76,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                       padding: const EdgeInsets.all(8),
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 3,
-                        childAspectRatio: 0.7,
+                        childAspectRatio: 0.65,
                         crossAxisSpacing: 8,
                         mainAxisSpacing: 8,
                       ),
@@ -96,6 +96,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
                                     movieName: name,
                                     streamUrl: streamUrl,
                                     posterUrl: poster,
+                                    streamId: item.streamId.toString(),
+                                    server: widget.server,
+                                    username: widget.username,
+                                    password: widget.password,
                                   ),
                                 ),
                               );
@@ -122,7 +126,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(fontSize: 12),
+                                    style: const TextStyle(fontSize: 12, color: Colors.white),
                                   ),
                                 ),
                               ],
