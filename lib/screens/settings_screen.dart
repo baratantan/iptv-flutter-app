@@ -49,6 +49,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // دالة لتنسيق التاريخ (إزالة الوقت وحرف Z)
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'غير محدد';
+    // تنسيق التاريخ: YYYY-MM-DD
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
   // جلب تفاصيل الاشتراك من السيرفر
   Future<void> _loadSubscriptionInfo() async {
     try {
@@ -70,9 +77,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       
       if (mounted) {
         setState(() {
-          // الخاصية الصحيحة هي info.user وليس info.userInfo
-          _expirationDate = info.user?.expiresAt?.toString();
-          // الخاصية الصحيحة هي active (bool) وليس status
+          // تنسيق التاريخ لإزالة الوقت وحرف Z
+          _expirationDate = _formatDate(info.user?.expiresAt);
           _accountStatus = (info.user?.active == true) ? 'نشط' : 'غير نشط';
         });
       }
@@ -92,7 +98,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (server.isEmpty) throw Exception('لا يوجد بيانات اتصال');
 
-      // إجبار التحديث في DataService
       await DataService.loadXtreamData(
         server: server,
         username: username,
@@ -372,9 +377,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(12)),
             child: Column(
               children: [
+                // التعديل: نص تسريع العتاد بالترتيب الصحيح
                 ListTile(
                   leading: const Icon(Icons.speed, color: Color(0xFFFF5238)),
-                  title: const Text('تسريع العتاد (Hardware Acceleration)', style: TextStyle(color: Colors.white)),
+                  title: const Text(
+                    'تسريع العتاد (Hardware Acceleration)',
+                    style: TextStyle(color: Colors.white),
+                    textDirection: TextDirection.rtl,
+                  ),
                   subtitle: const Text('مفعّل افتراضياً', style: TextStyle(color: Colors.grey, fontSize: 12)),
                   trailing: Switch(
                     value: true,
