@@ -33,9 +33,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
   bool _isFavorite = false;
   
   String? _plot;
-  String? _cast;
-  String? _director;
-  String? _genre;
   String? _duration;
   String? _rating;
   String? _releaseDate;
@@ -104,19 +101,15 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
       );
       final client = XtreamClient(portal, credentials);
 
-      // جلب تفاصيل الفيلم (XtVodDetails مباشرة، وليس info)
       final info = await client.getVodInfo(int.tryParse(widget.streamId!) ?? 0);
       
       if (info != null) {
         if (mounted) {
           setState(() {
             _plot = info.plot;
-            _cast = info.cast;
-            _director = info.director;
-            _genre = info.genre;
             _duration = info.duration;
-            _rating = info.rating;
-            _releaseDate = info.releasedate;
+            _rating = info.rating?.toString();
+            _releaseDate = info.year?.toString();
             _isLoading = false;
           });
         }
@@ -195,15 +188,13 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 runSpacing: 8,
                 children: [
                   if (_releaseDate != null && _releaseDate!.isNotEmpty)
-                    _buildBadge(_releaseDate!.length >= 4 ? _releaseDate!.substring(0, 4) : _releaseDate!, Colors.blue),
+                    _buildBadge(_releaseDate!, Colors.blue),
                   if (_duration != null && _duration!.isNotEmpty)
                     _buildBadge(_duration!, Colors.orange),
-                  if (_rating != null && _rating!.isNotEmpty && _rating != '0')
+                  if (_rating != null && _rating!.isNotEmpty && _rating != '0.0')
                     _buildBadge('⭐ $_rating', Colors.amber),
                   if (widget.movieName.toUpperCase().contains('MULTI-SUB'))
                     _buildBadge('MULTI-SUB', Colors.green),
-                  if (_genre != null && _genre!.isNotEmpty)
-                    _buildBadge(_genre!, Colors.purple),
                 ],
               ),
             ),
@@ -279,35 +270,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                     const Text('القصة', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Text(_plot!, style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.6)),
-                  ],
-                ),
-              ),
-
-            const SizedBox(height: 24),
-
-            if (_director != null && _director!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('المخرج', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(_director!, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-
-            if (_cast != null && _cast!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('طاقم العمل', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(_cast!, style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.6)),
                   ],
                 ),
               ),
