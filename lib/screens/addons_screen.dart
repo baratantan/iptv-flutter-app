@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/addon_models.dart';
 import '../services/data_service.dart';
 import 'player_screen.dart';
+import 'settings_screen.dart';
 
 class AddonsScreen extends StatefulWidget {
   const AddonsScreen({super.key});
@@ -38,6 +39,9 @@ class _AddonsScreenState extends State<AddonsScreen>
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
 
+  // اسم الإضافة النشطة (للهيدر)
+  String _activeAddonName = 'الإضافات';
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +56,48 @@ class _AddonsScreenState extends State<AddonsScreen>
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  // دالة ترجمة عناوين الأقسام من البرتغالية/الإنجليزية إلى العربية
+  String translateCategory(String title) {
+    final Map<String, String> translations = {
+      'Filmes Populares': 'الأفلام الشائعة',
+      'Filmes Recentes': 'أحدث الأفلام',
+      'Popular Movies': 'الأفلام الشائعة',
+      'Recent Movies': 'أحدث الأفلام',
+      'Recent': 'الأحدث',
+      'Popular': 'الشائعة',
+      'Trending': 'الرائجة',
+      'Top Rated': 'الأعلى تقييماً',
+      'Most Trending': 'الأكثر رواجاً',
+      'Popular Series': 'المسلسلات الشائعة',
+      'Recently Added': 'المضافة حديثاً',
+      'New Releases': 'الإصدارات الجديدة',
+      'Action': 'أكشن',
+      'Comedy': 'كوميديا',
+      'Drama': 'دراما',
+      'Horror': 'رعب',
+      'Romance': 'رومانسي',
+      'Anime': 'أنمي',
+      'Movies': 'أفلام',
+      'Series': 'مسلسلات',
+      'Latest Movies': 'أحدث الأفلام',
+      'Latest Series': 'أحدث المسلسلات',
+    };
+    
+    // البحث عن ترجمة مطابقة
+    if (translations.containsKey(title)) {
+      return translations[title]!;
+    }
+    
+    // البحث عن ترجمة جزئية (يحتوي العنوان على كلمة معروفة)
+    for (var entry in translations.entries) {
+      if (title.toLowerCase().contains(entry.key.toLowerCase())) {
+        return entry.value;
+      }
+    }
+    
+    return title; // إرجاع العنوان الأصلي إذا لم توجد ترجمة
   }
 
   void _startBannerAutoPlay(List<Map<String, dynamic>> bannerItems) {
@@ -99,6 +145,15 @@ class _AddonsScreenState extends State<AddonsScreen>
         return;
       }
 
+      // حفظ اسم الإضافة الأولى (أو "إضافات متعددة" إذا كان هناك أكثر من واحدة)
+      if (mounted) {
+        setState(() {
+          _activeAddonName = activeAddons.length == 1 
+              ? activeAddons.first.name 
+              : '${activeAddons.length} إضافات';
+        });
+      }
+
       Map<String, List<Map<String, dynamic>>> catalogContents = {};
       List<Map<String, dynamic>> allMovies = [];
       List<Map<String, dynamic>> allSeries = [];
@@ -115,7 +170,9 @@ class _AddonsScreenState extends State<AddonsScreen>
           final catalogType = catalog['type'] as String;
           final items = catalog['items'] as List<Map<String, dynamic>>;
 
-          final key = '${cache.addonName} - $catalogName';
+          // استخدام العنوان المترجم
+          final translatedName = translateCategory(catalogName);
+          final key = '${cache.addonName} - $translatedName';
           catalogContents[key] = items;
 
           for (var item in items) {
@@ -392,81 +449,112 @@ class _AddonsScreenState extends State<AddonsScreen>
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0E14),
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              backgroundColor: const Color(0xFF0B0E14),
-              pinned: true,
-              expandedHeight: MediaQuery.of(context).size.height * 0.5,
-              floating: true,
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.search, color: Color(0xFFFF5238)),
-                  onPressed: () {
-                    setState(() {
-                      _isSearching = !_isSearching;
-                    });
-                  },
-                ),
-              ],
-              flexibleSpace: FlexibleSpaceBar(
-                background: _buildBanner(featuredItems),
-              ),
-              bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(100),
-                child: Column(
-                  children: [
-                    if (_isSearching)
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: TextField(
-                          controller: _searchController,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: 'ابحث عن فيلم أو مسلسل...',
-                            hintStyle: const TextStyle(color: Colors.grey),
-                            prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
-                            filled: true,
-                            fillColor: const Color(0xFF1F2937),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          onChanged: _performSearch,
-                        ),
-                      ),
-                    // التبويبات التقليدية (فقط)
-                    TabBar(
-                      controller: _tabController,
-                      indicatorColor: const Color(0xFFFF5238),
-                      labelColor: const Color(0xFFFF5238),
-                      unselectedLabelColor: Colors.grey,
-                      tabs: const [
-                        Tab(text: 'الرئيسية'),
-                        Tab(text: 'الأفلام'),
-                        Tab(text: 'المسلسلات'),
-                        Tab(text: 'الأنمي'),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ];
-        },
-        body: TabBarView(
-          controller: _tabController,
+      // الهيدر العلوي (اسم الإضافة + زر إدارة)
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF111827),
+        title: Row(
           children: [
-            _isSearching && _searchController.text.isNotEmpty
-                ? _buildSearchResults()
-                : _buildHomeTab(),
-            _buildMediaGrid(_allMovies, 'movie'),
-            _buildMediaGrid(_allSeries, 'series'),
-            _buildMediaGrid(_allAnime, 'series'),
+            const Icon(Icons.extension, color: Color(0xFFFF5238), size: 20),
+            const SizedBox(width: 8),
+            Text(_activeAddonName, style: const TextStyle(color: Colors.white, fontSize: 16)),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Color(0xFFFF5238)),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              ).then((_) {
+                _loadData(); // إعادة التحميل عند العودة
+              });
+            },
+            tooltip: 'إدارة الإضافات',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // البانر (بدون تصنيفات)
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.4,
+            child: _buildBanner(featuredItems),
+          ),
+          
+          // شريط التصنيفات (خارج البانر)
+          Container(
+            color: const Color(0xFF0B0E14),
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: const Color(0xFFFF5238),
+              labelColor: const Color(0xFFFF5238),
+              unselectedLabelColor: Colors.grey,
+              tabs: const [
+                Tab(text: 'الرئيسية'),
+                Tab(text: 'الأفلام'),
+                Tab(text: 'المسلسلات'),
+                Tab(text: 'الأنمي'),
+              ],
+            ),
+          ),
+          
+          // شريط البحث (يظهر عند الحاجة)
+          if (_isSearching)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'ابحث عن فيلم أو مسلسل...',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  prefixIcon: const Icon(Icons.search, color: Color(0xFFFF5238)),
+                  filled: true,
+                  fillColor: const Color(0xFF1F2937),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onChanged: _performSearch,
+              ),
+            ),
+          
+          // زر البحث (عائم)
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: IconButton(
+                icon: Icon(_isSearching ? Icons.close : Icons.search, color: const Color(0xFFFF5238)),
+                onPressed: () {
+                  setState(() {
+                    _isSearching = !_isSearching;
+                    if (!_isSearching) {
+                      _searchController.clear();
+                      _searchResults = [];
+                    }
+                  });
+                },
+              ),
+            ),
+          ),
+          
+          // المحتوى (نتائج البحث أو التبويبات)
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _isSearching && _searchController.text.isNotEmpty
+                    ? _buildSearchResults()
+                    : _buildHomeTab(),
+                _buildMediaGrid(_allMovies, 'movie'),
+                _buildMediaGrid(_allSeries, 'series'),
+                _buildMediaGrid(_allAnime, 'series'),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -481,94 +569,98 @@ class _AddonsScreenState extends State<AddonsScreen>
   Widget _buildBanner(List<Map<String, dynamic>> bannerItems) {
     if (bannerItems.isEmpty) return Container(color: Colors.black);
 
-    return PageView.builder(
-      controller: _pageController,
-      itemCount: bannerItems.length,
-      onPageChanged: (index) {
-        setState(() {
-          _currentBannerIndex = index;
-        });
-      },
-      itemBuilder: (context, index) {
-        final item = bannerItems[index];
-        return GestureDetector(
-          onTap: () => _playItem(item),
-          child: Container(
-            decoration: BoxDecoration(
-              image: DecorationImage(
-                image: NetworkImage(item['poster'] ?? ''),
-                fit: BoxFit.cover,
-                onError: (e, s) {},
-              ),
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.7),
-                    const Color(0xFF0B0E14),
-                  ],
-                  stops: const [0.0, 0.7, 1.0],
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: _pageController,
+          itemCount: bannerItems.length,
+          onPageChanged: (index) {
+            setState(() {
+              _currentBannerIndex = index;
+            });
+          },
+          itemBuilder: (context, index) {
+            final item = bannerItems[index];
+            return GestureDetector(
+              onTap: () => _playItem(item),
+              child: Container(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: NetworkImage(item['poster'] ?? ''),
+                    fit: BoxFit.cover,
+                    onError: (e, s) {},
+                  ),
                 ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item['name'] ?? 'بدون اسم',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        shadows: [Shadow(offset: Offset(0, 2), blurRadius: 4, color: Colors.black)],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.7),
+                        const Color(0xFF0B0E14),
+                      ],
+                      stops: const [0.0, 0.7, 1.0],
                     ),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: () => _playItem(item),
-                      icon: const Icon(Icons.play_arrow, size: 28),
-                      label: const Text('تشغيل', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF5238),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // النقاط في المنتصف
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: bannerItems.asMap().entries.map((entry) {
-                        return Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _currentBannerIndex == entry.key
-                                ? const Color(0xFFFF5238)
-                                : Colors.grey.withOpacity(0.5),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item['name'] ?? 'بدون اسم',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            shadows: [Shadow(offset: Offset(0, 2), blurRadius: 4, color: Colors.black)],
                           ),
-                        );
-                      }).toList(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: () => _playItem(item),
+                          icon: const Icon(Icons.play_arrow, size: 28),
+                          label: const Text('تشغيل', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF5238),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // نقاط التمرير فقط (بدون تصنيفات)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: bannerItems.asMap().entries.map((entry) {
+                            return Container(
+                              width: 8,
+                              height: 8,
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _currentBannerIndex == entry.key
+                                    ? const Color(0xFFFF5238)
+                                    : Colors.grey.withOpacity(0.5),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ],
     );
   }
 
