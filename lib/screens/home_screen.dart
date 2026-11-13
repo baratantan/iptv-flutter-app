@@ -43,7 +43,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentTabIndex = 0;
   int _addonsKey = 0;
 
-  // للبحث (في الرئيسية)
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _searchResults = [];
@@ -122,7 +121,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return '';
   }
 
-  // دالة تنظيف العناوين (للأفلام والقنوات)
   String cleanTitle(String? title) {
     if (title == null || title.isEmpty) return 'بدون اسم';
     String cleaned = title;
@@ -132,7 +130,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return cleaned.trim();
   }
 
-  // دالة تنظيف أسماء الأفلام (تزيل البادئات وتستخرج السنة)
   Map<String, String> parseMovieTitle(String? title) {
     if (title == null || title.isEmpty) {
       return {'name': 'بدون اسم', 'year': ''};
@@ -140,20 +137,15 @@ class _HomeScreenState extends State<HomeScreen> {
     String cleaned = title;
     String year = '';
     
-    // إزالة البادئات مثل "EN - " أو "AR - "
     cleaned = cleaned.replaceAll(RegExp(r'^[A-Z]{2,3}\s*-\s*', caseSensitive: false), '');
-    // إزالة بادئات إضافية مثل "VOD | EN - "
     cleaned = cleaned.replaceAll(RegExp(r'^VOD\s*\|\s*[A-Z]{2,3}\s*-\s*', caseSensitive: false), '');
     
-    // استخراج السنة (4 أرقام بين 1900 و 2099)
     final yearMatch = RegExp(r'\b(19\d{2}|20\d{2})\b').firstMatch(cleaned);
     if (yearMatch != null) {
       year = yearMatch.group(1) ?? '';
-      // إزالة السنة من الاسم
       cleaned = cleaned.replaceFirst(yearMatch.group(0)!, '').trim();
     }
     
-    // إزالة الرموز المتبقية
     cleaned = cleaned.replaceAll(RegExp(r'\s*-\s*$'), '').trim();
     
     return {'name': cleaned.isEmpty ? 'بدون اسم' : cleaned, 'year': year};
@@ -240,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final allMovies = DataService.movies ?? [];
       final allSeries = DataService.series ?? [];
       final vodCategories = DataService.vodCategories ?? [];
-      final liveCategories = DataService.seriesCategories ?? [];
+      final liveCategories = DataService.liveCategories ?? []; // ← جديد: تصنيفات القنوات
       final seriesCategories = DataService.seriesCategories ?? [];
       
       final filteredLive = allLive.where((ch) => _isValidChannel(ch.name)).toList();
@@ -255,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _latestSeries = allSeries.take(12).toList();
         _latestChannels = filteredLive.take(12).toList();
         _categories = vodCategories;
-        _liveCategories = liveCategories;
+        _liveCategories = liveCategories; // ← جديد
         _seriesCategories = seriesCategories;
         
         _isLoading = false;
@@ -763,8 +755,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ============ صفحة القنوات ============
+  // ============ صفحة القنوات (المحدثة) ============
   Widget _buildChannelsTab() {
+    // فلترة التصنيفات الفارغة
+    final validCategories = _liveCategories.where((cat) {
+      final catId = cat.id ?? '';
+      return _allLiveChannels.any((ch) => (ch.categoryId ?? '') == catId);
+    }).toList();
+
     List<XtLiveChannel> filteredChannels = _allLiveChannels.where((ch) {
       final matchesSearch = _channelSearchQuery.isEmpty ||
           (ch.name ?? '').toLowerCase().contains(_channelSearchQuery.toLowerCase());
@@ -809,7 +807,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildChannelCategoryChip('all', 'الكل'),
                 _buildChannelCategoryChip('favorites', '⭐ المفضلة'),
-                ..._liveCategories.map((cat) {
+                ...validCategories.map((cat) {
                   return _buildChannelCategoryChip(cat.id ?? '', cat.name ?? '');
                 }).toList(),
               ],
@@ -897,7 +895,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ============ صفحة الأفلام (المحدثة) ============
+  // ============ صفحة الأفلام ============
   Widget _buildMoviesTab() {
     List<XtVodItem> filteredMovies = _allMovies.where((m) {
       final matchesSearch = _movieSearchQuery.isEmpty ||
@@ -910,7 +908,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return SafeArea(
       child: Column(
         children: [
-          // شريط البحث
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
@@ -935,7 +932,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           
-          // شريط التصنيفات
           SizedBox(
             height: 40,
             child: ListView(
@@ -952,7 +948,6 @@ class _HomeScreenState extends State<HomeScreen> {
           
           const SizedBox(height: 8),
           
-          // شبكة الأفلام
           Expanded(
             child: filteredMovies.isEmpty
                 ? const Center(child: Text('لا توجد أفلام', style: TextStyle(color: Colors.grey)))
@@ -994,7 +989,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Text(displayName, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
                               ],
                             ),
-                            // شارة السنة
                             if (year.isNotEmpty)
                               Positioned(
                                 top: 4,
@@ -1176,74 +1170,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  // _buildMediaGrid (النسخة القديمة) - نحتفظ بها لصفحة الأفلام القديمة (اختياري)
-  Widget _buildMediaGrid(List<dynamic> items, String type) {
-    if (items.isEmpty) return const Center(child: Text('لا توجد عناصر'));
-
-    return SafeArea(
-      child: GridView.builder(
-        padding: const EdgeInsets.all(8),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          childAspectRatio: 0.65,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        itemCount: items.length,
-        itemBuilder: (context, index) {
-          final item = items[index];
-          final name = type == 'movie' ? (parseMovieTitle(item.name)['name'] ?? '') : cleanTitle(item.name);
-          final poster = type == 'movie' ? (item.posterUrl ?? '') : (item.posterUrl ?? '');
-
-          return GestureDetector(
-            onTap: () {
-              if (type == 'movie') {
-                final streamUrl = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
-                _openMovieDetails(name, streamUrl, poster);
-              } else {
-                _openSeriesDetails(item);
-              }
-            },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: poster.isNotEmpty
-                        ? Image.network(
-                            poster,
-                            fit: BoxFit.cover,
-                            errorBuilder: (c, e, s) => Container(
-                              color: Colors.grey[900],
-                              child: const Icon(Icons.movie, color: Colors.grey),
-                            ),
-                          )
-                        : Container(
-                            color: Colors.grey[900],
-                            child: const Icon(Icons.movie, color: Colors.grey),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
