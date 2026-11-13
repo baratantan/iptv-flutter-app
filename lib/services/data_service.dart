@@ -8,7 +8,7 @@ import 'package:muxa_xtream/muxa_xtream.dart';
 class AddonCache {
   final String addonUrl;
   final String addonName;
-  final List<Map<String, dynamic>> catalogs; // كل الكاتالوجات
+  final List<Map<String, dynamic>> catalogs;
   final DateTime timestamp;
 
   AddonCache({
@@ -20,7 +20,6 @@ class AddonCache {
 }
 
 class DataService {
-  // استخدام http.Client واحد لإعادة استخدام الاتصالات
   static final http.Client _client = http.Client();
   
   // تخزين مؤقت لبيانات Xtream
@@ -29,6 +28,7 @@ class DataService {
   static List<XtSeriesItem>? _cachedSeries;
   static List<XtCategory>? _cachedVodCategories;
   static List<XtCategory>? _cachedSeriesCategories;
+  static List<XtCategory>? _cachedLiveCategories; // جديد: تصنيفات القنوات
   static DateTime? _xtreamCacheTime;
 
   // تخزين مؤقت لبيانات الإضافات
@@ -43,7 +43,6 @@ class DataService {
     required String password,
     bool forceRefresh = false,
   }) async {
-    // إذا كانت البيانات موجودة وحديثة، لا نجلبها مرة أخرى
     if (!forceRefresh && _xtreamCacheTime != null) {
       final age = DateTime.now().difference(_xtreamCacheTime!);
       if (age < _cacheDuration) {
@@ -55,21 +54,22 @@ class DataService {
     final credentials = XtreamCredentials(username: username, password: password);
     final client = XtreamClient(portal, credentials);
 
-    // جلب كل البيانات
+    // جلب كل البيانات (بما فيها تصنيفات القنوات)
     final results = await Future.wait([
       client.getLiveStreams(),
       client.getVodStreams(),
       client.getSeries(),
       client.getVodCategories(),
       client.getSeriesCategories(),
+      client.getLiveCategories(), // جديد
     ]);
 
-    // تحليل في الخلفية (Isolate) لمنع تجميد الواجهة
     _cachedLiveChannels = await compute(_parseChannels, results[0]);
     _cachedMovies = await compute(_parseMovies, results[1]);
     _cachedSeries = await compute(_parseSeries, results[2]);
     _cachedVodCategories = await compute(_parseCategories, results[3]);
     _cachedSeriesCategories = await compute(_parseCategories, results[4]);
+    _cachedLiveCategories = await compute(_parseCategories, results[5]); // جديد
     _xtreamCacheTime = DateTime.now();
   }
 
@@ -78,11 +78,11 @@ class DataService {
   static List<XtSeriesItem>? get series => _cachedSeries;
   static List<XtCategory>? get vodCategories => _cachedVodCategories;
   static List<XtCategory>? get seriesCategories => _cachedSeriesCategories;
+  static List<XtCategory>? get liveCategories => _cachedLiveCategories; // جديد
 
   // ============ الإضافات ============
 
   static Future<AddonCache?> loadAddonData(String addonUrl, String addonName, {bool forceRefresh = false}) async {
-    // التحقق من التخزين المؤقت
     if (!forceRefresh && _addonCache.containsKey(addonUrl)) {
       final cached = _addonCache[addonUrl]!;
       final age = DateTime.now().difference(cached.timestamp);
@@ -92,7 +92,6 @@ class DataService {
     }
 
     try {
-      // جلب manifest
       final manifestResponse = await _client.get(Uri.parse('$addonUrl/manifest.json'));
       if (manifestResponse.statusCode != 200) return null;
 
@@ -110,7 +109,6 @@ class DataService {
             final catalogJson = json.decode(catalogResponse.body);
             final metas = catalogJson['metas'] as List? ?? [];
             
-            // تحليل في الخلفية
             final items = await compute(_parseAddonItems, metas);
             
             allCatalogs.add({
@@ -144,6 +142,7 @@ class DataService {
     _cachedSeries = null;
     _cachedVodCategories = null;
     _cachedSeriesCategories = null;
+    _cachedLiveCategories = null; // جديد
     _xtreamCacheTime = null;
     _addonCache.clear();
   }
