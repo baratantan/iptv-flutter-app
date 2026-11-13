@@ -72,7 +72,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           // الخاصية الصحيحة هي info.user وليس info.userInfo
           _expirationDate = info.user?.expiresAt?.toString();
-          _accountStatus = info.user?.status;
+          // الخاصية الصحيحة هي active (bool) وليس status
+          _accountStatus = (info.user?.active == true) ? 'نشط' : 'غير نشط';
         });
       }
     } catch (e) {
@@ -266,7 +267,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Text(
                           'حالة الحساب: $_accountStatus',
                           style: TextStyle(
-                            color: _accountStatus == 'Active' ? Colors.green : Colors.red,
+                            color: _accountStatus == 'نشط' ? Colors.green : Colors.red,
                             fontSize: 12,
                           ),
                         ),
