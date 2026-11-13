@@ -47,20 +47,17 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _searchResults = [];
 
-  // للقنوات
   String _channelSearchQuery = '';
   String _selectedChannelCategory = 'all';
   final TextEditingController _channelSearchController = TextEditingController();
   List<String> _favoriteChannelIds = [];
   List<XtCategory> _liveCategories = [];
 
-  // للمسلسلات
   String _seriesSearchQuery = '';
   String _selectedSeriesCategory = 'all';
   final TextEditingController _seriesSearchController = TextEditingController();
   List<XtCategory> _seriesCategories = [];
 
-  // للأفلام
   String _movieSearchQuery = '';
   String _selectedMovieCategory = 'all';
   final TextEditingController _movieSearchController = TextEditingController();
@@ -121,25 +118,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return '';
   }
 
-  // دالة تنظيف العناوين (للأفلام والقنوات) - محسنة لإزالة الجودة والرموز
   String cleanTitle(String? title) {
     if (title == null || title.isEmpty) return 'بدون اسم';
     String cleaned = title;
-    // إزالة البادئات التقنية
     cleaned = cleaned.replaceAll(RegExp(r'^(4K-TOP\s*-\s*|VOD\s*\|\s*[A-Z]+\s*-\s*|FHD\s*-\s*|SD\s*-\s*|HD\s*-\s*|4K\s*-\s*|UHD\s*-\s*)', caseSensitive: false), '');
-    // إزالة كلمات الجودة من النهاية
     cleaned = cleaned.replaceAll(RegExp(r'\s+(8K|4K|FHD|UHD|HD|SD)\s*$', caseSensitive: false), '');
-    // إزالة الرموز الدائرية من النهاية
     cleaned = cleaned.replaceAll(RegExp(r'\s*[◉●○◎]\s*$'), '');
-    // إزالة الأقواس المربعة
     cleaned = cleaned.replaceAll(RegExp(r'\s*\[?(8K|4K|FHD|UHD|HD|SD)\]?\s*$', caseSensitive: false), '');
-    // إزالة الرموز المتبقية
     cleaned = cleaned.replaceAll(RegExp(r'^[\-\|\s]+'), '');
     cleaned = cleaned.replaceAll(RegExp(r'\s*[◉●○◎]\s*'), ' ');
     return cleaned.trim();
   }
 
-  // دالة تنظيف أسماء الأفلام (تزيل البادئات والسنة و MULTI-SUB)
   Map<String, String> parseMovieTitle(String? title) {
     if (title == null || title.isEmpty) {
       return {'name': 'بدون اسم', 'year': '', 'hasSub': 'false'};
@@ -170,7 +160,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return {'name': cleaned.isEmpty ? 'بدون اسم' : cleaned, 'year': year, 'hasSub': hasSub};
   }
 
-  // دالة تنظيف أسماء المسلسلات
   String cleanSeriesTitle(String? title) {
     if (title == null || title.isEmpty) return 'بدون اسم';
     String cleaned = title;
@@ -298,13 +287,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openMovieDetails(String name, String url, String? poster) {
+  // دالة فتح تفاصيل الفيلم (مع streamId)
+  void _openMovieDetails(String name, String url, String? poster, {String? streamId}) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MovieDetailsScreen(
           movieName: name,
           streamUrl: url,
           posterUrl: poster,
+          streamId: streamId,
+          server: _server,
+          username: _username,
+          password: _password,
         ),
       ),
     );
@@ -534,7 +528,10 @@ class _HomeScreenState extends State<HomeScreen> {
         final displayName = parsedTitle['name'] ?? 'بدون اسم';
         
         return GestureDetector(
-          onTap: () => _openMovieDetails(displayName, url, movie.posterUrl),
+          onTap: () => _openMovieDetails(
+            displayName, url, movie.posterUrl, 
+            streamId: movie.streamId.toString(),
+          ),
           child: Container(
             decoration: BoxDecoration(
               image: DecorationImage(
@@ -575,7 +572,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      onPressed: () => _openMovieDetails(displayName, url, movie.posterUrl),
+                      onPressed: () => _openMovieDetails(
+                        displayName, url, movie.posterUrl, 
+                        streamId: movie.streamId.toString(),
+                      ),
                       icon: const Icon(Icons.play_arrow, size: 28),
                       label: const Text('تشغيل الآن', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
@@ -651,7 +651,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () {
             if (type == 'movie') {
               final url = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
-              _openMovieDetails(name, url, poster);
+              _openMovieDetails(name, url, poster, streamId: item.streamId.toString());
             } else if (type == 'series') {
               _openSeriesDetails(item);
             } else if (type == 'channel') {
@@ -704,7 +704,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         onItemTap: (item) {
                           if (type == 'movie') {
                             final url = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
-                            _openMovieDetails(parseMovieTitle(item.name)['name'] ?? '', url, item.posterUrl);
+                            _openMovieDetails(
+                              parseMovieTitle(item.name)['name'] ?? '', 
+                              url, 
+                              item.posterUrl, 
+                              streamId: item.streamId.toString(),
+                            );
                           } else if (type == 'channel') {
                             final url = '$_server/live/$_username/$_password/${item.streamId}.m3u8';
                             _playStream(url, cleanTitle(item.name));
@@ -742,7 +747,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () {
                   if (type == 'movie') {
                     final url = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
-                    _openMovieDetails(name, url, poster);
+                    _openMovieDetails(name, url, poster, streamId: item.streamId.toString());
                   } else if (type == 'channel') {
                     final url = '$_server/live/$_username/$_password/${item.streamId}.m3u8';
                     _playStream(url, name);
@@ -785,7 +790,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ============ صفحة القنوات (المحدثة) ============
   Widget _buildChannelsTab() {
     final validCategories = _liveCategories.where((cat) {
       final catId = cat.id ?? '';
@@ -929,7 +933,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ============ صفحة الأفلام ============
   Widget _buildMoviesTab() {
     List<XtVodItem> filteredMovies = _allMovies.where((m) {
       final matchesSearch = _movieSearchQuery.isEmpty ||
@@ -1005,7 +1008,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       return GestureDetector(
                         onTap: () {
                           final url = '$_server/movie/$_username/$_password/${item.streamId}.mp4';
-                          _openMovieDetails(displayName, url, poster);
+                          _openMovieDetails(displayName, url, poster, streamId: item.streamId.toString());
                         },
                         child: Stack(
                           children: [
@@ -1098,7 +1101,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ============ صفحة المسلسلات ============
   Widget _buildSeriesTab() {
     List<XtSeriesItem> filteredSeries = _allSeries.where((s) {
       final matchesSearch = _seriesSearchQuery.isEmpty ||
@@ -1248,7 +1250,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// شاشة "عرض الكل"
 class _SeeAllScreen extends StatelessWidget {
   final String title;
   final List<dynamic> items;
@@ -1322,7 +1323,6 @@ class _SeeAllScreen extends StatelessWidget {
   }
 }
 
-// دالة مساعدة لتنظيف العناوين (خارج الكلاس)
 String cleanTitle(String? title) {
   if (title == null || title.isEmpty) return 'بدون اسم';
   String cleaned = title;
