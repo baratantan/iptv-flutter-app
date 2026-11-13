@@ -70,8 +70,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       
       if (mounted) {
         setState(() {
-          _expirationDate = info.userInfo?.expDate;
-          _accountStatus = info.userInfo?.status;
+          // الخاصية الصحيحة هي info.user وليس info.userInfo
+          _expirationDate = info.user?.expiresAt?.toString();
+          _accountStatus = info.user?.status;
         });
       }
     } catch (e) {
@@ -238,7 +239,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
         title: const Text('الإعدادات'),
-        // إزالة زر + المكرر (لا يوجد actions)
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -250,7 +250,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(12)),
             child: Column(
               children: [
-                // مصدر المحتوى + تفاصيل الاشتراك
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Color(0xFFFF5238)),
                   title: const Text('مصدر المحتوى الحالي', style: TextStyle(color: Colors.white)),
@@ -260,12 +259,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Text(_sourceType, style: const TextStyle(color: Colors.grey)),
                       if (_expirationDate != null)
                         Text(
-                          'تاريخ الانتهاء: ${_expirationDate}',
+                          'تاريخ الانتهاء: $_expirationDate',
                           style: const TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                       if (_accountStatus != null)
                         Text(
-                          'حالة الحساب: ${_accountStatus}',
+                          'حالة الحساب: $_accountStatus',
                           style: TextStyle(
                             color: _accountStatus == 'Active' ? Colors.green : Colors.red,
                             fontSize: 12,
@@ -275,7 +274,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const Divider(height: 1, color: Colors.grey),
-                // تحديث القنوات والأفلام
                 ListTile(
                   leading: _isRefreshing
                       ? const SizedBox(
@@ -289,7 +287,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _isRefreshing ? null : _refreshPlaylist,
                 ),
                 const Divider(height: 1, color: Colors.grey),
-                // تغيير بيانات الاشتراك
                 ListTile(
                   leading: const Icon(Icons.edit, color: Color(0xFFFF5238)),
                   title: const Text('تغيير بيانات الاشتراك', style: TextStyle(color: Colors.white)),
@@ -299,7 +296,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 const Divider(height: 1, color: Colors.grey),
-                // تسجيل الخروج
                 ListTile(
                   leading: const Icon(Icons.logout, color: Colors.red),
                   title: const Text('تسجيل الخروج (مسح البيانات)', style: TextStyle(color: Colors.red)),
@@ -380,10 +376,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: const Text('تسريع العتاد (Hardware Acceleration)', style: TextStyle(color: Colors.white)),
                   subtitle: const Text('مفعّل افتراضياً', style: TextStyle(color: Colors.grey, fontSize: 12)),
                   trailing: Switch(
-                    value: true, // افتراضي
-                    onChanged: (value) {
-                      // يمكن إضافة منطق هنا لاحقاً
-                    },
+                    value: true,
+                    onChanged: (value) {},
                     activeColor: const Color(0xFFFF5238),
                   ),
                 ),
