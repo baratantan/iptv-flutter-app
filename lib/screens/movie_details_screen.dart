@@ -104,18 +104,19 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
       );
       final client = XtreamClient(portal, credentials);
 
+      // جلب تفاصيل الفيلم (XtVodDetails مباشرة، وليس info)
       final info = await client.getVodInfo(int.tryParse(widget.streamId!) ?? 0);
       
-      if (info != null && info.info != null) {
+      if (info != null) {
         if (mounted) {
           setState(() {
-            _plot = info.info?.plot;
-            _cast = info.info?.cast;
-            _director = info.info?.director;
-            _genre = info.info?.genre;
-            _duration = info.info?.duration;
-            _rating = info.info?.rating;
-            _releaseDate = info.info?.releasedate;
+            _plot = info.plot;
+            _cast = info.cast;
+            _director = info.director;
+            _genre = info.genre;
+            _duration = info.duration;
+            _rating = info.rating;
+            _releaseDate = info.releasedate;
             _isLoading = false;
           });
         }
@@ -275,23 +276,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'القصة',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const Text('القصة', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    Text(
-                      _plot!,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
-                        height: 1.6,
-                      ),
-                    ),
+                    Text(_plot!, style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.6)),
                   ],
                 ),
               ),
@@ -304,19 +291,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'المخرج',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const Text('المخرج', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    Text(
-                      _director!,
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
+                    Text(_director!, style: const TextStyle(color: Colors.grey, fontSize: 14)),
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -328,23 +305,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'طاقم العمل',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const Text('طاقم العمل', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    Text(
-                      _cast!,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
-                        height: 1.6,
-                      ),
-                    ),
+                    Text(_cast!, style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.6)),
                   ],
                 ),
               ),
@@ -366,11 +329,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
       ),
       child: Text(
         text,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
+        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
       ),
     );
   }
