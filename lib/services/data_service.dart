@@ -54,32 +54,21 @@ class DataService {
     final credentials = XtreamCredentials(username: username, password: password);
     final client = XtreamClient(portal, credentials);
 
-    // دالة مساعدة لجلب البيانات مع حماية من الأخطاء لكل طلب على حدة
-    Future<T?> safeFetch<T>(Future<T> Function() fetch) async {
-      try {
-        return await fetch();
-      } catch (e) {
-        debugPrint('خطأ في جلب البيانات من السيرفر: $e');
-        return null; // إرجاع null في حال حدوث خطأ بدلاً من انهيار التطبيق
-      }
-    }
+    final results = await Future.wait([
+      client.getLiveStreams(),
+      client.getVodStreams(),
+      client.getSeries(),
+      client.getVodCategories(),
+      client.getSeriesCategories(),
+      client.getLiveCategories(),
+    ]);
 
-    // جلب البيانات بشكل منفصل
-    final liveChannelsData = await safeFetch(() => client.getLiveStreams());
-    final moviesData = await safeFetch(() => client.getVodStreams());
-    final seriesData = await safeFetch(() => client.getSeries());
-    final vodCategoriesData = await safeFetch(() => client.getVodCategories());
-    final seriesCategoriesData = await safeFetch(() => client.getSeriesCategories());
-    final liveCategoriesData = await safeFetch(() => client.getLiveCategories());
-
-    // تحويل البيانات مع التأكد من أنها ليست فارغة
-    _cachedLiveChannels = liveChannelsData != null ? await compute(_parseChannels, liveChannelsData) : [];
-    _cachedMovies = moviesData != null ? await compute(_parseMovies, moviesData) : [];
-    _cachedSeries = seriesData != null ? await compute(_parseSeries, seriesData) : [];
-    _cachedVodCategories = vodCategoriesData != null ? await compute(_parseCategories, vodCategoriesData) : [];
-    _cachedSeriesCategories = seriesCategoriesData != null ? await compute(_parseCategories, seriesCategoriesData) : [];
-    _cachedLiveCategories = liveCategoriesData != null ? await compute(_parseCategories, liveCategoriesData) : [];
-    
+    _cachedLiveChannels = await compute(_parseChannels, results[0]);
+    _cachedMovies = await compute(_parseMovies, results[1]);
+    _cachedSeries = await compute(_parseSeries, results[2]);
+    _cachedVodCategories = await compute(_parseCategories, results[3]);
+    _cachedSeriesCategories = await compute(_parseCategories, results[4]);
+    _cachedLiveCategories = await compute(_parseCategories, results[5]);
     _xtreamCacheTime = DateTime.now();
   }
 
@@ -112,6 +101,7 @@ class DataService {
 
       for (var catalog in catalogs) {
         try {
+          // إضافة معامل اللغة (ar-SA) لطلب الكتالوج
           final catalogUrl = '$addonUrl/catalog/${catalog['type']}/${catalog['id']}.json?lang=ar-SA';
           final catalogResponse = await _client.get(Uri.parse(catalogUrl));
 
@@ -160,22 +150,18 @@ class DataService {
 
 // دوال التحليل في الخلفية
 List<XtLiveChannel> _parseChannels(dynamic data) {
-  if (data == null) return [];
   return (data as List).cast<XtLiveChannel>();
 }
 
 List<XtVodItem> _parseMovies(dynamic data) {
-  if (data == null) return [];
   return (data as List).cast<XtVodItem>();
 }
 
 List<XtSeriesItem> _parseSeries(dynamic data) {
-  if (data == null) return [];
   return (data as List).cast<XtSeriesItem>();
 }
 
 List<XtCategory> _parseCategories(dynamic data) {
-  if (data == null) return [];
   return (data as List).cast<XtCategory>();
 }
 
